@@ -1,0 +1,93 @@
+Timer unit: 1e-06 s
+
+Total time: 2.09151 s
+File: /Users/williamrudisill/Documents/Conceptual_Runoff_Model/lumped_hydro_model_fast.py
+Function: ForwardModelFaster at line 300
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   300                                           def ForwardModelFaster(DailyTemp,
+   301                                                                  DailyPrecip,
+   302                                                                  LenOfDayHr,
+   303                                                                  dz,
+   304                                                                  lapse_rate = -.0065,
+   305                                                                  orog_gradient = .002, # Parameter
+   306                                                                  M = 1.0,             # Parameter
+   307                                                                  frtdir = .0001,     # Parameter
+   308                                                                  frtgw = .06,      # Parameter
+   309                                                                  smcap = 100,      # Parameter
+   310                                                                  etpar = .005,     # Parameter
+   311                                                                  tmelt = .01,      # Parameter
+   312                                                                  t_snow = 0.0,     # Parameter
+   313                                                                  t_melt = 1.0,      # Parameter
+   314                                                                  t_base = 0,      # Parameter
+   315                                                                  t_power = .5):   # Parameter
+   316                                           
+   317                                               # Run the forward model for the given forcing data
+   318                                               #assert len(DailyTemp) == len(DailyPrecip) == len(LenOfDayHr)
+   319                                           #    ntimes = len(DailyTemp)
+   320         1         29.0     29.0      0.0      ntimes = 365
+   321                                               # Create the output/input arrays
+   322                                               # Wb = np.zeros(ntimes, dtype='float')
+   323                                               # Wu = np.zeros(ntimes, dtype='float')
+   324                                               # Snow = np.zeros(ntimes, dtype='float')
+   325                                               # Qb = np.zeros(ntimes, dtype='float')
+   326                                               # Qd = np.zeros(ntimes, dtype='float')
+   327                                               # ET = np.zeros(ntimes, dtype='float')
+   328                                           
+   329         1          2.0      2.0      0.0      Wb = 0.0
+   330         1          2.0      2.0      0.0      Wu = 0.0
+   331         1          1.0      1.0      0.0      Snow = 0.0
+   332         1          1.0      1.0      0.0      Qb = 0.0
+   333         1          2.0      2.0      0.0      Qd = 0.0
+   334         1          1.0      1.0      0.0      ET = 0.0
+   335                                           
+   336                                           
+   337         1         43.0     43.0      0.0      Q = np.zeros(ntimes, dtype='float')
+   338                                               # Loop through ntimes
+   339       365        531.0      1.5      0.0      for t in range(1,ntimes):
+   340       364        822.0      2.3      0.0          L = LenOfDayHr[t]
+   341                                                   # adjust precipitation
+   342       364     392007.0   :q     18.7          Pd = M*np.mean(DailyPrecip[t] + DailyPrecip[t]*dz*orog_gradient)
+   343       364     293456.0    806.2     14.0          Td = np.mean(DailyTemp[t] + dz*lapse_rate)
+   344                                           
+   345                                                   # get rid of nan values...
+   346                                                   # if np.nan in [Pd, Td]:
+   347                                                   #     Q_array[t] = Q_array[t-1]
+   348                                                   #     Wb[t] = Wb[t-1]
+   349                                                   #     Wu[t] = Wu[t-1]
+   350                                                   #     Snow[t] = Snow[t-1]
+   351                                                   #     break
+   352                                           
+   353                                                   # compute T30; ignore temps from before the starting point...
+   354       364      42551.0    116.9      2.0          T30 = np.mean(DailyTemp[np.max([0, t-30]):t])
+   355                                           
+   356                                                   # Run the model one timespep forward... save result
+   357       364        747.0      2.1      0.0          Snow, Wb, Wu, Qb, Qd, ET = one_time_forward(Pd,
+   358       364        329.0      0.9      0.0                                                      Td,
+   359       364        297.0      0.8      0.0                                                      T30,
+   360       364        354.0      1.0      0.0                                                      L,
+   361       364        330.0      0.9      0.0                                                      Wu,
+   362       364        301.0      0.8      0.0                                                      Wb,
+   363       364        307.0      0.8      0.0                                                      Snow,
+   364       364        349.0      1.0      0.0                                                      frtdir,
+   365       364        309.0      0.8      0.0                                                      frtgw,
+   366       364        342.0      0.9      0.0                                                      smcap,
+   367       364        342.0      0.9      0.0                                                      etpar,
+   368       364        310.0      0.9      0.0                                                      tmelt,
+   369       364        324.0      0.9      0.0                                                      t_snow,
+   370       364        379.0      1.0      0.0                                                      t_melt,
+   371       364        315.0      0.9      0.0                                                      t_base,
+   372       364    1354710.0   3721.7     64.8                                                      t_power)
+   373                                           
+   374                                                   # store the times
+   375                                                   # Qb[t] = Qb_t
+   376                                                   # Qd[t] = Qd_t
+   377                                                   # Wb[t] = Wb_t
+   378                                                   # Wu[t] = Wu_t
+   379                                                   # Snow[t] = Snow_t
+   380                                                   # ET[t] = ET_t
+   381       364       2020.0      5.5      0.1          Q[t] = Qb + Qd
+   382                                               # compute the total discharge and return it
+   383                                           
+   384         1          1.0      1.0      0.0      return Q
