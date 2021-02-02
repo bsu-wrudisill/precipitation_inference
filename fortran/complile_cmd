@@ -1,0 +1,1 @@
+f2py -c -m --fcompiler=gnu95 myfastmodule fast_foward_model.f90
