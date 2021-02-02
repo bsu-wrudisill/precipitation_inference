@@ -157,7 +157,6 @@ subroutine one_step(Pd, Td, T30, L, Wu, Wb, Snow, Q, frtdir, frtgw, smcap, etpar
 
     ! ! Compute discharge
     Q = Qb + Qd
-    print*, Q
 
 end subroutine one_step
 
@@ -174,16 +173,17 @@ end subroutine one_step
 
 
 
-subroutine fwd(N, PdVec, TdVec, LVec, QVec, frtdir, frtgw, smcap, etpar, t_snow, t_melt, t_base, t_power)
+subroutine fwd(N, Ndz, PdVec, TdVec, LVec, QVec, dz, frtdir, frtgw, smcap, etpar, t_snow, t_melt, t_base, t_power, bias, opg)!, opg, mult)
   implicit none
-  integer, intent(inout) :: N   ! lenght of the Forcings
-  real, intent(in), dimension(0:N-1) :: PdVec, TdVec, LVec                                                     !Forcings
-  real, intent(out), dimension(0:N-1):: QVec                                                         !Q
-  real, intent(in) :: frtdir, frtgw, smcap, etpar, t_snow, t_melt, t_base, t_power           !Parameters
+  integer, intent(inout) :: N, Ndz   ! length of the Forcings
+  real, intent(in), dimension(0:N) :: PdVec, TdVec, LVec                               !Forcings
+  real, intent(in), dimension(0:Ndz) :: dz                                             !Forcings
+  real, intent(out), dimension(0:N):: QVec                                             !Q
+  real, intent(in) :: frtdir, frtgw, smcap, etpar, t_snow, t_melt, t_base, t_power, bias, opg
 
   ! internal ?
-  real :: Pd, Td, T30, L, Wu, Wb, Snow, Q
-  integer :: i, maxi, j
+  real :: Pd, dPd, Td, dTd, T30, L, Wu, Wb, Snow, Q
+  integer :: i, maxi, j, k
 
 
   Wb = 0.0
@@ -196,10 +196,29 @@ subroutine fwd(N, PdVec, TdVec, LVec, QVec, frtdir, frtgw, smcap, etpar, t_snow,
     L = LVec(i)
 
     ! Adjust the precipitation and temperature
-    Td = TdVec(i)
-    Pd = PdVec(i)
+    dTd = 0
+    dPd = 0
+
+    ! ! Loopp through all of the basin points ... dz is a vector of the height difference
+    do k = 1,Ndz
+         dTd = dTd + dz(k) * -0.0065
+         dPd = dPd + PdVec(i) * dz(k) * opg
+    end do
 
 
+    ! !compute the mean of the difference to add to basin wide mean temp
+    dTd = dTd/Ndz
+    ! dPd = dPd/Ndz
+
+    Td = TdVec(i) + dTd
+    Pd = PdVec(i) + dPd
+    if (PdVec(i).gt.0) then
+      Pd = max(Pd + bias, 0.0) ! make sure that precipitation is non-zero
+    end if
+
+
+    ! Td = TdVec(i) + dTd
+    ! Pd = mult*sPdVec(i) + dPd
 
     ! Compute the 30 day mean ....
     maxi = max(i-30, 0)
