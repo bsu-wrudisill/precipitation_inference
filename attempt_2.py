@@ -55,7 +55,7 @@ def my_loglike(parameters, forcings, obs_data, sigma):
 
 
 
-    model = ffm.fwd(PdVec, TdVec, LVec, dz, frtdir, frtgw, smcap, etpar, t_snow, t_melt, t_base, t_power, bias, opg)
+    model = ffm.fwd(4, PdVec, TdVec, LVec, dz, frtdir, frtgw, smcap, etpar, t_snow, t_melt, t_base, t_power, bias, opg)
 
     # Compute the liklihood function
     return -(0.5/sigma**2)*np.sum((obs_data - model)**2)
@@ -84,11 +84,11 @@ class LogLike(tt.Op):
 
 def main():
     # Get forcing data
-    TdVec = np.load("daily_temp.npy")
-    PdVec = np.load("daily_precip.npy")
-    LVec = np.load("day_len_hrs.npy")
-    dz = np.load("dz_reduced.npy")
-    obs_data = np.load("daily_q_observed.npy")
+    TdVec = np.load("./data/daily_temp.npy")
+    PdVec = np.load("./data/daily_precip.npy")
+    LVec = np.load("./data/day_len_hrs.npy")
+    dz = np.load("./data/dz_reduced.npy")
+    obs_data = np.load("./data/daily_q_observed.npy")
 
     # Put the forcings into a list ...
     forcings = [PdVec, TdVec, LVec, dz]
@@ -107,13 +107,15 @@ def main():
         frtdir = pm.Normal("frtdir", mu=.09, sigma= .03)
         frtgw  = pm.Normal("frtgw",  mu=.06, sigma=.03)
         smcap  = pm.Normal("smcap",  mu=250, sigma=75)
-        etpar  = pm.Normal("etpar",  mu=.05, sigma=.2)
+        # etpar  = pm.Normal("etpar",  mu=.05, sigma=.2)
+        etpar  =  pm.distributions.continuous.Uniform("etpar", lower=.001, upper=.1)
+
         t_snow = pm.Normal("t_snow",  mu=0., sigma=1.0)
         t_melt = pm.Normal("t_melt",  mu=0., sigma=1.0)
         t_base = pm.Normal("t_base",  mu=.06, sigma=.05)
         t_power = pm.Normal("t_power",  mu=.5, sigma=.03)
         # bias    = pm.Normal("bias",  mu=0, sigma=.05)
-        ogp     = pm.distributions.continuous.Uniform("ogp", lower=0, upper=.0025)
+        ogp     = pm.distributions.continuous.Uniform("ogp", lower=0, upper=.3)
 
 
         # convert m and c to a tensor vector

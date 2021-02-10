@@ -12,7 +12,7 @@ import sys
 class parms:
     frtdir = .09
     frtgw = .06
-    smcap = 300
+    smcap = 200
     ddpar = 1.
     etpar = .001
     tmelt = 1.0
@@ -302,13 +302,14 @@ if __name__ == '__main__':
     # np.save("dz.npy", dz)
 
 
-    daily_temp = np.load("daily_temp.npy")
-    daily_precip = np.load("daily_precip.npy")
-    daily_q_observed = np.load("daily_q_observed.npy")
-    day_len_hrs = np.load("day_len_hrs.npy")
-    dz = np.load("dz.npy")
-    Q = ForwardModel(daily_temp, daily_precip, day_len_hrs, dz, M=1.0)
+    daily_temp = np.load("./data/daily_temp.npy")
+    daily_precip = np.load("./data/daily_precip.npy")
+    daily_q_observed = np.load("./data/daily_q_observed.npy")
+    day_len_hrs = np.load("./data/day_len_hrs.npy")
+    dz = np.load("./data/dz_reduced.npy")
+    Q = ForwardModel(daily_temp, daily_precip, day_len_hrs, dz)
     plt.plot(Q)
+    plt.plot(daily_q_observed)
     plt.show()
 
 

@@ -1,5 +1,3 @@
-"""Summary
-"""
 import seaborn as sb
 import numpy as np
 import pymc3 as pm
@@ -19,6 +17,10 @@ from myfastmodule import fast_foward_model as ffm
 import pickle
 
 
+PdVec = np.load("./data/daily_precip.npy")
+dz = np.load("./data/dz_reduced.npy")
+
+
 
 with open('trace.pkl', 'rb') as buff:
     trace = pickle.load(buff)
@@ -29,9 +31,15 @@ with open('prior.pkl', 'rb') as buff:
 with open('posterior_predictive.pkl', 'rb') as buff:
     posterior_predictive = pickle.load(buff)
 
-with pm.Model() as model:
-    #fig,ax = plt.subplots(3)
-    # az.plot_posterior(posterior_predictive)# var_names=['ogp', 'etpar', 't_melt'], ax=ax, color='red')
-    # #az.plot_posterior(prior, var_names=['ogp', 'etpar', 't_melt'], ax=ax, color='black')
 
-    # plt.show()
+ppvec = posterior_predictive.get_values('ogp').reshape(14000, 1)
+dzvec = dz.reshape(1, 599)
+avgvec = np.ones((1, 599))/599
+
+
+precip = PdVec.sum() + PdVec.sum()*ppvec.dot(dzvec).dot(avgvec.T)
+
+# fig,ax = plt.subplots()
+# sb.histplot(posterior_predictive.get_values('ogp'), kde=True, ax=ax)
+# #sb.histplot(prior.get('ogp'), kde=True, ax=ax, color='red')
+# plt.show()

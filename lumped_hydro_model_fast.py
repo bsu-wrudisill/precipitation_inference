@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+"""Summary
+"""
 # coding: utf-8
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,7 +9,6 @@ import metpy.calc as mpcalc
 from metpy.units import units
 import sys
 import time
-from numba import jit
 
 
 # #### Helper functions
@@ -20,7 +21,7 @@ class parms:
     tmelt = 1.0
     t_snow = 1.0
     t_melt = .8
-    t_base = .9   # this for the ddpar calculation
+    t_base = 1.1   # this for the ddpar calculation
     t_power = .09  # for ddpar calulation
 
 
@@ -73,6 +74,7 @@ def Drainage(Wu, smcap):
         D = 0
     # D is "drainage"
     return D
+
 #@jit
 def PET_CalcFaster(L, t, etpar):
     # Potential evapotranspiration calculator
@@ -123,7 +125,6 @@ def Ms(Td, Snow, tmelt, ddpar):
     # Snow: amount in the bucket
     # ddpar: parameter (but not constant)
     # tmelt: parameter
-
     if Td > tmelt:
         melt = (Td-tmelt)*ddpar
         if melt > Snow: # check is there is enough snow to melt...
@@ -134,9 +135,9 @@ def Ms(Td, Snow, tmelt, ddpar):
     else:
         return 0
 
-###  Run the model...
-#@jit
-def one_time_forward(Pd,               # Forcing (Precipitation)
+#
+def one_time_forward(nLayers,         # number of layers for the snow model
+                     Pd,               # Forcing (Precipitation)
                      Td,               # Forcing (Temperature)
                      T30,              # Forcing (30-Day Tempearture avg)
                      L,                # Forcing (Day Length)
@@ -151,9 +152,8 @@ def one_time_forward(Pd,               # Forcing (Precipitation)
                      t_snow,     # Parameter
                      t_melt,      # Parameter
                      t_base,      # Parameter
-                     t_power):   # Parameter
-
-
+                     t_power,
+                     ):   # Parameter
     # Pd: Daily precipiation (mm/d)
     # Td: Daily temperature (T)
     # T30: Mean temperature from the previous 30 days
@@ -162,27 +162,51 @@ def one_time_forward(Pd,               # Forcing (Precipitation)
     # Snow: Current snow bucket (mm)
     # L: length of day (hours)
     # parameters....
-
     # Determine precipitation phase
     # Add snow to snowpack if necessary
-    if Td >= t_snow:
-        Pr = Pd
-    else:
-        Pr = 0                   # no rain
 
-    # compute daily snow accumulation
-    Ps = Pd - Pr  # snow = total - rain
+    # Compute the snowmelt and accumulation for each layer
 
-    # Compute the snowmelt
-    # compute ddpar first
-    ddpar = DDPar_Calc(T30, t_base, t_power)
-    Md = Ms(Td, Snow, t_melt, ddpar)
+    # Melt and rain accumulator variables
+    Mdsum = 0
+    Prsum = 0
+    Tdavg = 0
+    for k in range(nLayers):
+        # Get the precipitation and temperature
+        if Td[k] >= t_snow:
+            Prk = Pd[k]
+        else:
+            Prk = 0                   # no rain
+
+        # Compute daily snow accumulation
+        Psk = Pd[k] - Prk
+
+        # Compute the snowmelt
+        # compute ddpar first
+        print(T30[k], t_base, t_power)
+        ddpar = DDPar_Calc(T30[k], t_base, t_power)
+        Mdk = Ms(Td[k], Snow[k], t_melt, ddpar)
+
+        # gather up the total melt
+        Mdsum = Mdk + Mdsum
+        Prsum = Prsum + Prk
+
+        # melt/accumulate the snowpack
+        Snow[k] = Snow[k] + Psk - Mdk # last snow, new snow, snow melt
+
+        Tdavg = Tdavg + Td[k]
+
+    Tdavg = Tdavg/nLayers
+    # --------------------------------------------
+    # Now compute the Soil runoff as one layer ...
+    # --------------------------------------------
+
 
     # Compute the direct runoff (Qd)
-    Qd = frtdir * (Pr + Md)
+    Qd = frtdir * (Prsum + Mdsum)
 
     # Compute the Soil Water input
-    Wi = (1-frtdir) * (Pr + Md) # Wi in paper
+    Wi = (1-frtdir) * (Prsum + Mdsum) # Wi in paper
 
     # Compute drainage; 1st layer of soil --> 2nd layer of soil
     D = Drainage(Wu, smcap)
@@ -193,7 +217,7 @@ def one_time_forward(Pd,               # Forcing (Precipitation)
     # Compute PET
     # Firt compute saturation specific humidity
     #rho_v_sat = .0001 # use mpcaclc to compute this
-    PET = PET_CalcFaster(L, Td, etpar)
+    PET = PET_CalcFaster(L, Tdavg, etpar)
     # PET = 8.0 # mm...
 
     # Compute AET
@@ -210,8 +234,6 @@ def one_time_forward(Pd,               # Forcing (Precipitation)
     Wb = Wb + dWbdt
     Wu = Wu + dWudt
 
-    # snow
-    Snow = Snow + Ps #- Md # last snow, new snow, snow melt
 
     # Compute discharge
     Q = Qb + Qd
@@ -220,126 +242,76 @@ def one_time_forward(Pd,               # Forcing (Precipitation)
     return Snow, Wb, Wu, Qb, Qd, E
 
 
-def ForwardModel(DailyTemp,
-                 DailyPrecip,
-                 LenOfDayHr,
-                 dz,
-                 lapse_rate = -.0065,
-                 orog_gradient = .002, # Parameter
-                 M = 1.0,             # Parameter
-                 frtdir = .0001,     # Parameter
-                 frtgw = .06,      # Parameter
-                 smcap = 100,      # Parameter
-                 etpar = .005,     # Parameter
-                 tmelt = .01,      # Parameter
-                 t_snow = 0.0,     # Parameter
-                 t_melt = 1.0,      # Parameter
-                 t_base = 0,      # Parameter
-                 t_power = .5):   # Parameter
 
-    # Run the forward model for the given forcing data
-    assert len(DailyTemp) == len(DailyPrecip) == len(LenOfDayHr)
-    ntimes = len(DailyTemp)
 
-    # Create the output/input arrays
-    Wb = np.zeros(ntimes, dtype='float')
-    Wu = np.zeros(ntimes, dtype='float')
-    Snow = np.zeros(ntimes, dtype='float')
-    Qb = np.zeros(ntimes, dtype='float')
-    Qd = np.zeros(ntimes, dtype='float')
-    ET = np.zeros(ntimes, dtype='float')
-
-    # Loop through ntimes
-    for t in range(1,ntimes):
-        L = LenOfDayHr[t]
-        # adjust precipitation
-        Pd = M*np.mean(DailyPrecip[t] + DailyPrecip[t]*dz*orog_gradient)
-        Td = np.mean(DailyTemp[t] + dz*lapse_rate)
-
-        # compute T30; ignore temps from before the starting point...
-        T30 = np.mean(DailyTemp[np.max([0, t-30]):t])
-
-        # Run the model one timespep forward... save result
-        Snow_t, Wb_t, Wu_t, Qb_t, Qd_t, ET_t = one_time_forward(Pd,
-                                                                Td,
-                                                                T30,
-                                                                L,
-                                                                Wu[t-1],
-                                                                Wb[t-1],
-                                                                Snow[t-1],
-                                                                frtdir,
-                                                                frtgw,
-                                                                smcap,
-                                                                etpar,
-                                                                tmelt,
-                                                                t_snow,
-                                                                t_melt,
-                                                                t_base,
-                                                                t_power)
-
-        # store the times
-        Qb[t] = Qb_t
-        Qd[t] = Qd_t
-        Wb[t] = Wb_t
-        Wu[t] = Wu_t
-        Snow[t] = Snow_t
-        ET[t] = ET_t
-
-    # compute the total discharge and return it
-    Q = Qb + Qd
-    return Q
-
-#@jit
-def ForwardModelFaster(DailyTemp,
-                       DailyPrecip,
-                       LenOfDayHr,
-                       dz,
-                       lapse_rate = -.0065,
-                       orog_gradient = .002, # Parameter
-                       M = 1.0,             # Parameter
-                       frtdir = .0001,     # Parameter
-                       frtgw = .06,      # Parameter
-                       smcap = 100,      # Parameter
-                       etpar = .005,     # Parameter
-                       tmelt = .01,      # Parameter
-                       t_snow = 0.0,     # Parameter
-                       t_melt = 1.0,      # Parameter
-                       t_base = 0,      # Parameter
-                       t_power = .5):   # Parameter
+def ForwardModelFasterLayers(DailyTemp,
+                             DailyPrecip,
+                             LenOfDayHr,
+                             dz,
+                             nLayers = 3,
+                             lapse_rate = -.0065,
+                             orog_gradient = .002, # Parameter
+                             M = .30,             # Parameter
+                             frtdir = .0001,     # Parameter
+                             frtgw = .02,      # Parameter
+                             smcap = 120,      # Parameter
+                             etpar = .07,     # Parameter
+                             tmelt = .01,      # Parameter
+                             t_snow = 0.8,     # Parameter
+                             t_melt = 0.1,      # Parameter
+                             t_base = .9,      # Parameter
+                             t_power = .9):   # Parameter
 
     # Run the forward model for the given forcing data
     #assert len(DailyTemp) == len(DailyPrecip) == len(LenOfDayHr)
 #    ntimes = len(DailyTemp)
     ntimes = 365
-    # Create the output/input arrays
-    # Wb = np.zeros(ntimes, dtype='float')
-    # Wu = np.zeros(ntimes, dtype='float')
-    # Snow = np.zeros(ntimes, dtype='float')
-    # Qb = np.zeros(ntimes, dtype='float')
-    # Qd = np.zeros(ntimes, dtype='float')
-    # ET = np.zeros(ntimes, dtype='float')
-
-    Wb = 0.0
-    Wu = 0.0
-    Snow = 0.0
+    Wb = 20.0
+    Wu = 20.0
     Qb = 0.0
     Qd = 0.0
     ET = 0.0
-
-
+    Snow = np.array([0.0, 0.0, 0.0])
     Q = np.zeros(ntimes, dtype='float')
+    Snowholder = np.zeros((3, ntimes))
+    # Divide region into "nLayers" EQUAL segments -- maybe change this
+    seg1 = int(len(dz)/nLayers)
+    seg2 = seg1*2
+    ldz = len(dz)
+
+    tholder = np.zeros((3, ntimes))
+
     # Loop through ntimes
     for t in range(1,ntimes):
         L = LenOfDayHr[t]
-        # adjust precipitation
-        Pd = M*np.mean(DailyPrecip[t] + DailyPrecip[t]*dz*orog_gradient)
-        Td = np.mean(DailyTemp[t] + dz*lapse_rate)
+
+        Pd = np.zeros(nLayers)
+        Td = np.zeros(nLayers)
+        T30 = np.zeros(nLayers)
+
+
+        Pd[0] = M*np.mean(DailyPrecip[t] + DailyPrecip[t]*dz[0:seg1]*orog_gradient)
+        Pd[1] = M*np.mean(DailyPrecip[t] + DailyPrecip[t]*dz[seg1:seg2]*orog_gradient)
+        Pd[2] = M*np.mean(DailyPrecip[t] + DailyPrecip[t]*dz[seg2:ldz]*orog_gradient)
+
+
+        Td[0] = np.mean(DailyTemp[t] + dz[0:seg1]*lapse_rate)
+        Td[1] = np.mean(DailyTemp[t] + dz[seg1:seg2]*lapse_rate)
+        Td[2] = np.mean(DailyTemp[t] + dz[seg2:]*lapse_rate)
+
+        tholder[:,t] = Td
 
         # compute T30; ignore temps from before the starting point...
-        T30 = np.mean(DailyTemp[np.max([0, t-30]):t])
+        # T30 = np.mean(DailyTemp[np.max([0, t-30]):t])
+
+        T30[0] = np.mean([DailyTemp[x] + dz[:seg1]*lapse_rate for x in range(np.max([1, t-30]))])
+        T30[1] = np.mean([DailyTemp[x] + dz[seg1:seg2]*lapse_rate for x in range(np.max([1, t-30]))])
+        T30[2] = np.mean([DailyTemp[x] + dz[seg2:]*lapse_rate for x in range(np.max([1, t-30]))])
+
 
         # Run the model one timespep forward... save result
-        Snow, Wb, Wu, Qb, Qd, ET = one_time_forward(Pd,
+        Snow, Wb, Wu, Qb, Qd, ET = one_time_forward(3,
+                                                    Pd,
                                                     Td,
                                                     T30,
                                                     L,
@@ -357,16 +329,14 @@ def ForwardModelFaster(DailyTemp,
                                                     t_power)
 
         Q[t] = Qb + Qd
+        Snowholder[:,t] = Snow
     # compute the total discharge and return it
 
-    return Q
-
-
+    return Q, Snowholder, tholder
 
 
 if __name__ == '__main__':
     # Import stuff to read the forcings
-    from ForcingModel import *
 
     # Gather the forcings
     # start = "2010-10-01"
@@ -382,17 +352,26 @@ if __name__ == '__main__':
     # np.save("dz.npy", dz)
 
 
-    daily_temp = np.load("daily_temp.npy")
-    daily_precip = np.load("daily_precip.npy")
-    daily_q_observed = np.load("daily_q_observed.npy")
-    day_len_hrs = np.load("day_len_hrs.npy")
-    dz = np.load("dz.npy")
+    daily_temp = np.load("./data/daily_temp.npy")
+    daily_precip = np.load("./data/daily_precip.npy")
+    daily_q_observed = np.load("./data/daily_q_observed.npy")
+    day_len_hrs = np.load("./data/day_len_hrs.npy")
+    dz = np.load("./data/dz_reduced.npy")
 
-    ForwardModelFaster(daily_temp, daily_precip, day_len_hrs, dz, M=1.0)
+    q, snow, tholder = ForwardModelFasterLayers(daily_temp, daily_precip, day_len_hrs, dz, M=1.0)
+    plt.plot(q)
+    plt.plot(daily_q_observed)
+    # plt.plot(snow[0,:])
+    # plt.plot(snow[1,:])
+    # plt.plot(snow[2,:])
 
-    start = time.time()
-    ForwardModelFaster(daily_temp, daily_precip, day_len_hrs, dz, M=1.0)
-    print('It took', time.time()-start, 'seconds.')
+    # plt.plot(tholder[0,:], label='0')
+    # plt.plot(tholder[1,:], label='1')
+    # plt.plot(tholder[2,:], label='2')
+
+    # start = time.time()
+    # ForwardModelFaster(daily_temp, daily_precip, day_len_hrs, dz, M=1.0)
+    # print('It took', time.time()-start, 'seconds.')
 
 
 
