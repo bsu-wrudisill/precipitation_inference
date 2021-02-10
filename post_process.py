@@ -30,6 +30,8 @@ with open('posterior_predictive.pkl', 'rb') as buff:
     posterior_predictive = pickle.load(buff)
 
 with pm.Model() as model:
-    fig,ax = plt.subplots(3)
-    az.plot_posterior(posterior_predictive, var_names=['ogp', 'etpar', 't_melt'], ax=ax, color='red')
-    az.plot_posterior(prior, var_names=['ogp', 'etpar', 't_melt'], ax=ax, color='black')
+    #fig,ax = plt.subplots(3)
+    # az.plot_posterior(posterior_predictive)# var_names=['ogp', 'etpar', 't_melt'], ax=ax, color='red')
+    # #az.plot_posterior(prior, var_names=['ogp', 'etpar', 't_melt'], ax=ax, color='black')
+
+    # plt.show()

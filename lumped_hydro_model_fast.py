@@ -21,7 +21,7 @@ class parms:
     tmelt = 1.0
     t_snow = 1.0
     t_melt = .8
-    t_base = .9   # this for the ddpar calculation
+    t_base = 1.1   # this for the ddpar calculation
     t_power = .09  # for ddpar calulation
 
 
