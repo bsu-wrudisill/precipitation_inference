@@ -293,80 +293,9 @@ subroutine fwd(N, Ndz, Nls, PdVec, TdVec, LVec, QVec, dz, frtdir, frtgw, smcap, 
     QVec(i) = Q
 
 
-    ! ! Adjust the precipitation and temperature
-    ! dTd = 0
-    ! dPd = 0
-
-    ! ! ! Loopp through all of the basin points ... dz is a vector of the height difference
-    ! do k = 1,Ndz
-    !      dTd = dTd + dz(k) * -0.0065
-    !      dPd = dPd + PdVec(i) * dz(k) * opg
-    ! end do
-
-
-    ! ! !compute the mean of the difference to add to basin wide mean temp
-    ! dTd = dTd/Ndz
-    ! ! dPd = dPd/Ndz
-
-    ! Td = TdVec(i) + dTd
-    ! Pd = PdVec(i) + dPd
-    ! if (PdVec(i).gt.0) then
-    !   Pd = max(Pd + bias, 0.0) ! make sure that precipitation is non-zero
-    ! end if
-
-
-    ! ! Td = TdVec(i) + dTd
-    ! ! Pd = mult*sPdVec(i) + dPd
-
-    ! ! Compute the 30 day mean ....
-    ! maxi = max(i-30, 0)
-    ! T30 = 0.0
-    ! do j = maxi,i
-    !    T30 = T30 + TdVec(j)
-    ! end do
-    ! T30 = T30/(i - maxi)
-    ! ! End comput 30 day mean ...
-
-
-    ! ! run the model
   end do
 
 end subroutine fwd
-
-
-
-    ! Q = np.zeros(ntimes, dtype='float')
-
-    ! # Loop through ntimes
-    ! for t in range(1,ntimes):
-    !     L = LenOfDayHr[t]
-    !     # adjust precipitation
-    !     Pd = M*np.mean(DailyPrecip[t] + DailyPrecip[t]*dz*orog_gradient)
-    !     Td = np.mean(DailyTemp[t] + dz*lapse_rate)
-
-    !     # compute T30; ignore temps from before the starting point...
-    !     T30 = np.mean(DailyTemp[np.max([0, t-30]):t])
-
-    !     # Run the model one timespep forward... save result
-    !     Snow, Wb, Wu, Qb, Qd, ET = one_time_forward(Pd,
-    !                                                 Td,
-    !                                                 T30,
-    !                                                 L,
-    !                                                 Wu,
-    !                                                 Wb,
-    !                                                 Snow,
-    !                                                 frtdir,
-    !                                                 frtgw,
-    !                                                 smcap,
-    !                                                 etpar,
-    !                                                 tmelt,
-    !                                                 t_snow,
-    !                                                 t_melt,
-    !                                                 t_base,
-    !                                                 t_power)
-
-    !     Q[t] = Qb + Qd
-    ! # compute the total discharge and return it
 
 
 end module fast_foward_model
