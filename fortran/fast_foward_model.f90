@@ -115,7 +115,9 @@ subroutine one_step(Nls, Pd, Td, T30, L, Wu, Wb, Snow, Q, frtdir, frtgw, smcap, 
   Prsum = 0
   Tdavg = 0
 
+  ! loop through the snow layers
   do k=0,Nls-1
+
     ! determine precip phase
     if (Td(k) > t_snow) then
         Prk = Pd(k)
