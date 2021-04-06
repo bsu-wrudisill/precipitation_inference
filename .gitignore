@@ -6,3 +6,6 @@ output
 *.so
 *.pkl
 *.npy
+*.mod
+*.o
+
