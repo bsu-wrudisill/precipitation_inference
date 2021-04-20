@@ -150,17 +150,6 @@ subroutine snow17(jday, &
     ! BEGIN
     ! ------
 
-    !! Initialization
-    !! Antecedent Temperature Index, deg C
-    ! ait = 0.0
-    !! Liquid water capacity
-    ! w_qx = 0.0
-    !! Liquid water held by the snow (mm)
-    ! w_q = 0.0
-    !! accumulated water equivalent of the iceportion of the snow cover (mm)
-    ! w_i = 0.0
-    !! Heat deficit, also known as NEGHS, Negative Heat Storage
-    ! deficit = 0.0
 
     ! constant
     !stefan = 6.12 * (10 ** (-10))
@@ -171,9 +160,6 @@ subroutine snow17(jday, &
     p_atm = 33.86 * (29.9 - (0.335 * elevation / 100) + (0.00022 * ((elevation / 100) ** 2.4)))
 
     ! what's happening here?
-    transitionx = (/pxtemp1, pxtemp2/)
-    transitiony = (/1.0, 0.0/)
-
     tipm_dt = 1.0 - ((1.0 - tipm) ** (dt / 6))
 
     ! Loop over time dimension
@@ -202,9 +188,9 @@ subroutine snow17(jday, &
          else if (tair >= pxtemp2) then
              fracsnow = 0.0
          else
-             !!!!!!!!!!!!! FIX ME  !!!!!!!!!!!!!!!!!!
-             fracsnow = 0.0 !np.interp(tair, transitionx, transitiony)
-             !!!!!!!!!!!!! FIX ME  !!!!!!!!!!!!!!!!!!
+             ! Linear interpolate between 0 and 1
+             fracsnow  = (tair - pxtemp1)/(pxtemp2 - pxtemp1)
+
          end if
 
     ! Option 2
@@ -358,32 +344,38 @@ end subroutine snow17
 
 
 
-subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, & !INPUTS
-                        elevation, &       ! parameters
-                        dt, &              ! parameters
-                        rvs, &             ! parameters
-                        uadj, &            ! parameters
-                        mbase, &           ! parameters
-                        mfmax, &           ! parameters
-                        mfmin, &           ! parameters
-                        tipm, &            ! parameters
-                        nmf, &             ! parameters
-                        plwhc, &           ! parameters
-                        pxtemp, &          ! parameters
-                        pxtemp1, &         ! parameters
-                        pxtemp2, &         ! parameters
-                        melt_outflowVec, & ! OUTPUT
-                        sweVec)             !  OUTPUT
+subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, &  ! INPUTS
+                        nlayers, opg, dz,           & ! INPUTS
+                        dt,   &                                 ! parameters
+                        rvs, &                                  ! parameters
+                        uadj, &                                 ! parameters
+                        mbase, &                                ! parameters
+                        mfmax, &                                ! parameters
+                        mfmin, &                                ! parameters
+                        tipm, &                                 ! parameters
+                        nmf, &                                  ! parameters
+                        plwhc, &                                ! parameters
+                        pxtemp, &                               ! parameters
+                        pxtemp1, &                              ! parameters
+                        pxtemp2, &                              ! parameters
+                        melt_outflowVec, &                      ! OUTPUT
+                        sweVec)                                 !  OUTPUT
 
+                        implicit none
 
                         ! INPUT forcings
-                        integer, intent(in) :: ntimes
-                        real, intent(in), dimension(0:ntimes) :: jdayVec
-                        real, intent(in), dimension(0:ntimes) :: precipVec
-                        real, intent(in), dimension(0:ntimes) :: tairVec
+                        integer, intent(in) :: ntimes        ! Number of timesteps..
+                        real, intent(in), dimension(ntimes) :: jdayVec   ! julian day
+                        real, intent(in), dimension(ntimes) :: precipVec ! precipitation
+                        real, intent(in), dimension(ntimes) :: tairVec   ! air temperature
 
-                        ! INPUT paramters
-                        real, intent(in) :: elevation
+                        ! INPUT paramters  -- preciptiation adjustment
+                        real, intent(in) :: opg
+                        integer, intent(in) :: nlayers       ! Number of model layers
+                        real, intent(in), dimension(nlayers) :: dz       ! vector of *mean* elevtaion differences for each nlayers
+
+
+                        ! INPUT paramters -- Snow 17
                         real, intent(in) :: dt
                         real, intent(in) :: rvs
                         real, intent(in) :: uadj
@@ -397,13 +389,15 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, & !INPUTS
                         real, intent(in) :: pxtemp1
                         real, intent(in) :: pxtemp2
 
-                        ! OUTPUTS melt vector
-                        real, intent(out), dimension(0:ntimes-1) :: melt_outflowVec
-                        real, intent(out), dimension(0:ntimes-1):: sweVec
+                        ! OUTPUTS
+                        real, intent(out), dimension(nlayers,ntimes) :: melt_outflowVec
+                        real, intent(out), dimension(nlayers,ntimes) :: sweVec
 
                         !internal
 
                         ! states
+                        real, parameter :: t_lapse = -.0065  ! 6.5 c/m
+                        real, parameter :: stat_elev = 35.  ! elevation in HUNDREDS of meters. Approx elevation of the Butte Snotel
                         real  :: swe
                         real  :: ait
                         real  :: w_qx
@@ -411,47 +405,64 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, & !INPUTS
                         real  :: w_i
                         real  :: deficit
                         real  :: melt
+                        real  :: elevation
+                        real :: precip_il ! precipitation in the lth layer
+                        real :: temp_il
                         ! misc
-                        integer :: i
+                        integer :: i   ! for time loop
+                        integer :: l   ! for layer loop
 
-                        ! Initial conditions
-                        ait = 0.
-                        swe = 0.
-                        ait = 0.
-                        w_qx = 0.
-                        w_q = 0.
-                        w_i = 0.
-                        deficit = 0.
+                        ! loop through layers
+                        do l=1,nlayers
 
-                        ! call the snow model ntimes
-                        do i=0,ntimes
-                          call snow17(jdayVec(i), &
-                                      precipVec(i), &
-                                      tairVec(i), &
-                                      elevation, &
-                                      dt, &
-                                      rvs, &
-                                      uadj, &
-                                      mbase, &
-                                      mfmax, &
-                                      mfmin, &
-                                      tipm, &
-                                      nmf, &
-                                      plwhc, &
-                                      pxtemp, &
-                                      pxtemp1, &
-                                      pxtemp2, &
-                                      swe, &
-                                      ait, &
-                                      w_qx, &
-                                      w_q, &
-                                      w_i, &
-                                      deficit, &
-                                      melt)
+                          ! Set Initial conditions for the layer
+                          ait = 0.
+                          swe = 0.
+                          ait = 0.
+                          w_qx = 0.
+                          w_q = 0.
+                          w_i = 0.
+                          deficit = 0.
+                          melt = 0
 
-                        ! store the swe ...
-                        sweVec(i) = swe
-                        melt_outflowVec(i) = melt
+                          ! midpoint elevation ...
+                          elevation = stat_elev + dz(l)/100 ! elevation is in units of 100s of meters for whatever reason...
+
+                          ! loop through timesteps
+                          do i=1,ntimes
+
+                            ! adjust the precipitaiton
+                            precip_il = precipVec(i) + opg * dz(l) * precipVec(i)
+                            temp_il = tairVec(i) + t_lapse * dz(l)
+
+                            call snow17(jdayVec(i), &
+                                        precip_il, &
+                                        temp_il, &
+                                        elevation, &
+                                        dt, &
+                                        rvs, &
+                                        uadj, &
+                                        mbase, &
+                                        mfmax, &
+                                        mfmin, &
+                                        tipm, &
+                                        nmf, &
+                                        plwhc, &
+                                        pxtemp, &
+                                        pxtemp1, &
+                                        pxtemp2, &
+                                        swe, &
+                                        ait, &
+                                        w_qx, &
+                                        w_q, &
+                                        w_i, &
+                                        deficit, &
+                                        melt)
+
+                            ! store the data...
+                            melt_outflowVec(l,i) = swe
+                            sweVec(l,i) = melt
+                        end do
                       end do
 
 
