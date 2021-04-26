@@ -2,7 +2,6 @@ module snowmodule17
 implicit none
 contains
 
-
 !!!!!!!!!!!!!!! !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ! 1) Snow-17 accumulation and ablation model.
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -43,9 +42,9 @@ real function melt_function(jday,  &
     ! ------
 
     ! a few parameters
-    days = 365
-    n_mar21 = jday - 80
-    sv = (0.5 * SIN((n_mar21 * 2 * 3.14159265359) / days)) + 0.5
+    days = 365.
+    n_mar21 = jday - 80.
+    sv = (0.5 * SIN((n_mar21 * 2. * 3.14159265359) / days)) + 0.5
 
     ! assumes lat < 45
     av = 1.0
@@ -91,7 +90,7 @@ subroutine snow17(jday, &
     real, intent(in) :: tair
     real, intent(in) :: elevation
     real, intent(in) :: dt
-    real, intent(in) :: rvs
+    integer, intent(in) :: rvs
     real, intent(in) :: uadj
     real, intent(in) :: mbase
     real, intent(in) :: mfmax
@@ -144,11 +143,16 @@ subroutine snow17(jday, &
     real :: m_ros3
     real :: m_nr
     real :: qw
-    !f2py intent(in,out) :: e_sat
 
+!!!!!    !f2py intent(in,out) :: e_sat
 
     ! BEGIN
     ! ------
+
+    ! Deal with parameters that should not be zero...
+    ! if (uadj < 0) then
+    !   call exit(0)
+    ! end if
 
 
     ! constant
@@ -172,8 +176,10 @@ subroutine snow17(jday, &
     !  Select the 'rain versus snow' method !
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    ! Option 0
-    if (rvs == 0) then
+    ! Select rain vs snow method
+    select case(rvs)
+      ! Option 0
+      case(0);
         if (tair <= pxtemp) then
             ! then the air temperature is cold enough for snow to occur
             fracsnow = 1.0
@@ -181,8 +187,8 @@ subroutine snow17(jday, &
             fracsnow = 0.0
         end if
 
-    ! Option 1
-    else if  (rvs == 1) then
+      ! Option 1
+      case(1)
          if (tair <= pxtemp1) then
             fracsnow = 1.0
          else if (tair >= pxtemp2) then
@@ -190,15 +196,8 @@ subroutine snow17(jday, &
          else
              ! Linear interpolate between 0 and 1
              fracsnow  = (tair - pxtemp1)/(pxtemp2 - pxtemp1)
-
          end if
-
-    ! Option 2
-    else if (rvs == 2) then
-         fracsnow = 1.0
-    else
-    !     raise ValueError('Invalid rain vs snow option')
-    end if
+    end select
 
    ! now move on...
    fracrain = 1.0 - fracsnow
@@ -344,40 +343,42 @@ end subroutine snow17
 
 
 
-subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, &  ! INPUTS
-                        nlayers, opg, dz,           & ! INPUTS
-                        dt,   &                                 ! parameters
-                        rvs, &                                  ! parameters
-                        uadj, &                                 ! parameters
-                        mbase, &                                ! parameters
-                        mfmax, &                                ! parameters
-                        mfmin, &                                ! parameters
-                        tipm, &                                 ! parameters
-                        nmf, &                                  ! parameters
-                        plwhc, &                                ! parameters
-                        pxtemp, &                               ! parameters
-                        pxtemp1, &                              ! parameters
-                        pxtemp2, &                              ! parameters
-                        melt_outflowVec, &                      ! OUTPUT
-                        sweVec)                                 !  OUTPUT
+subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, & ! INPUTS
+                        nlayers, dz, dt, rvs,                & ! INPUTS
+                        OPG_METHOD, opg, bias, &               ! parameters
+                        uadj, &                                ! parameters
+                        mbase, &                               ! parameters
+                        mfmax, &                               ! parameters
+                        mfmin, &                               ! parameters
+                        tipm, &                                ! parameters
+                        nmf, &                                 ! parameters
+                        plwhc, &                               ! parameters
+                        pxtemp, &                              ! parameters
+                        pxtemp1, &                             ! parameters
+                        pxtemp2, &                             ! parameters
+                        melt_outflowVec, &                     ! OUTPUT
+                        sweVec)                                !  OUTPUT
 
                         implicit none
 
                         ! INPUT forcings
-                        integer, intent(in) :: ntimes        ! Number of timesteps..
+                        integer, intent(in) :: ntimes                    ! Number of timesteps..
                         real, intent(in), dimension(ntimes) :: jdayVec   ! julian day
                         real, intent(in), dimension(ntimes) :: precipVec ! precipitation
                         real, intent(in), dimension(ntimes) :: tairVec   ! air temperature
 
-                        ! INPUT paramters  -- preciptiation adjustment
-                        real, intent(in) :: opg
-                        integer, intent(in) :: nlayers       ! Number of model layers
+                        ! INPUT paramters
+                        integer, intent(in) :: nlayers                   ! Number of model layers
                         real, intent(in), dimension(nlayers) :: dz       ! vector of *mean* elevtaion differences for each nlayers
 
+                        ! input parameters -- precipitation adjustment
+                        integer, intent(in) :: OPG_METHOD
+                        real, intent(in) :: opg
+                        real, intent(in) :: bias
 
                         ! INPUT paramters -- Snow 17
                         real, intent(in) :: dt
-                        real, intent(in) :: rvs
+                        integer, intent(in) :: rvs
                         real, intent(in) :: uadj
                         real, intent(in) :: mbase
                         real, intent(in) :: mfmax
@@ -396,8 +397,9 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, &  ! INPUTS
                         !internal
 
                         ! states
-                        real, parameter :: t_lapse = -.0065  ! 6.5 c/m
-                        real, parameter :: stat_elev = 35.  ! elevation in HUNDREDS of meters. Approx elevation of the Butte Snotel
+                        real, parameter :: t_lapse = -.0065    ! 6.5 c/m
+                        real, parameter :: stat_elev = 30.9    ! elevation in HUNDREDS of meters. Approx elevation of the Butte Snotel
+                        real, parameter :: opg_lower_adj = .25  ! reduced the opg gradient for lower stations
                         real  :: swe
                         real  :: ait
                         real  :: w_qx
@@ -408,6 +410,8 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, &  ! INPUTS
                         real  :: elevation
                         real :: precip_il ! precipitation in the lth layer
                         real :: temp_il
+                        real ::  opg_adjusted
+
                         ! misc
                         integer :: i   ! for time loop
                         integer :: l   ! for layer loop
@@ -431,8 +435,42 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, &  ! INPUTS
                           ! loop through timesteps
                           do i=1,ntimes
 
-                            ! adjust the precipitaiton
-                            precip_il = precipVec(i) + opg * dz(l) * precipVec(i)
+                            ! Adjust the precipitation
+                            select case(OPG_METHOD)
+
+                            ! basic linear adjustment
+                            case(0)
+                              ! adjust the precipitaiton
+                              if (precipVec(i) > 0.) then
+                                precip_il = precipVec(i) + opg * dz(l) * precipVec(i) + bias
+                              else
+                                precip_il = 0
+                              end if
+
+                            ! some kind of curvy adjustment
+                            case(1)
+
+                              ! adjust the precipitaiton IF there's precip
+                              if (precipVec(i) > 0.) then
+
+                                ! we are below the station. reduce the precip lapse rate ...
+                                if (dz(l) < 0) then
+                                  opg_adjusted = opg*opg_lower_adj
+                                ! We are above the station. keep the precip lapse rate as it is
+                                else
+                                  opg_adjusted = opg
+                                end if
+
+                                precip_il = precipVec(i) + opg_adjusted * dz(l) * precipVec(i) + bias
+
+                              ! Keep precip zero if there's none
+                              else
+                                precip_il = 0
+                              end if
+
+                            end select
+
+                            ! Adjust air temperature
                             temp_il = tairVec(i) + t_lapse * dz(l)
 
                             call snow17(jdayVec(i), &

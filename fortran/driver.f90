@@ -156,11 +156,8 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
 
     select case(SNOWOP)
         case(0)
-            call snow17driver(ntimes, &
-                              jday, &
-                              precip, &
-                              tair, &
-                              elevation, &
+            call snow17driver(ntimes, jday, precip, tair, &
+                              nlayers, opg, dz, stat_elev, &
                               dt, &
                               rvs, &
                               uadj, &

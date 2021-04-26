@@ -266,15 +266,15 @@ subroutine fwd(N, Ndz, Nls, PdVec, TdVec, LVec, QVec, dz, frtdir, frtgw, smcap, 
          ! Add bias only if there is precipitation
          if (PdVec(i).gt.0.0) then
            ! Also  make sture that it's never non-negative...
-           dPd = max(0.0, dPd + PdVec(i) * dz(k) * opg + bias)
+           dPd = dPd + PdVec(i) * dz(k) * opg + bias
          end if
 
       ! End looping through the dz points...
       end do
 
       ! compute average adjustment
-      dTd = dTd/llc_0
-      dPd = dPd/llc_0
+      dTd = dTd/(llc_0-llc)
+      dPd = dPd/(llc_0-llc)
 
       ! Note the dimensions here...
       Td(li) = TdVec(i) + dTd
