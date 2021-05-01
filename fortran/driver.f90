@@ -1,7 +1,58 @@
 module driver
 !use parameters
 implicit none
+
 contains
+
+! Numerical functions
+
+!!!! F2PY does not allow for allocatable function inputs!!!
+!!!! major limitation..... !!!
+subroutine convolve(nb, nx, ny, bb, xx, yy)
+    integer, intent(in) :: nb             !# number of coefficients in filter
+    integer, intent(in) :: nx             !# number of coefficients in input
+    integer, intent(in) :: ny             !# number of coefficients in output will be nx+nb-1
+    real, intent(in), dimension(nb) :: bb         !# filter coefficients
+    real, intent(in), dimension(nx) :: xx         !# input trace
+    real, intent(out), dimension(ny) :: yy
+
+    !internal
+    integer :: ib, ix, iy
+    !integer, dimension(ny) :: yy
+
+    yy = 0.0
+    print*, nb,nx,ny
+    !ny = nx + nb -1
+    do ib = 1, nb
+        do ix = 1, nx
+            yy(ix+ib-1) = yy( ix+ib-1) + xx(ix) * bb(ib)
+        end do
+    end do
+end subroutine convolve
+
+
+! This is the gamma function kernel used to convolve
+! runoff signal to produce streamfow
+real function ht(t, k, n) !=3.5, N=4)
+    real, intent(in) :: t, k, N
+    ht = (t/k)**(N-1) * EXP(-t/k)/k*GAMMA(N)
+end function ht
+
+! Helper functions
+function PET(L, t, etpar)
+    real :: PET, L, t, etpar
+    real :: sat_vap_pres, abs_humidity
+    ! Potential evapotranspiration calculator
+    ! L: Length of day
+    ! rho_v_sat: staturated absolute humidity
+    ! etpar: parameter
+    sat_vap_pres = (.6112)*exp((17.67*t)/(t + 243.5))
+    abs_humidity = (2165 * sat_vap_pres)/(t + 273.15)
+    PET=L*abs_humidity*etpar
+end function PET
+
+
+
 subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
                         ETOP,       &         ! OPTION   Percolation option
                         DRAINOP,    &         ! OPTION   Snow option
@@ -14,12 +65,13 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
                         jday,       &         ! FORCING   Day of Year
                         tair,       &         ! FORCING   Air Temperature, length N
                         precip,     &         ! FORCING   Precipitation, length N
-                        dt,         &         ! PARAMETER   SNOW
-                        elevation,  &         ! PARAMETER   SNOW
-                        t_base,     &         ! PARAMETER   SNOW01
-                        t_power,    &         ! PARAMETER   SNOW01
-                        t_melt,     &         ! PARAMETER   SNOW01
-                        rvs ,       &         ! PARAMETER   SNOW17
+                        nlayers,    &         ! PARAMETER   SNOW17
+                        rvs,        &         ! PARAMETER   SNOW17
+                        opg_method, &         ! PARAMETER   SNOW17
+                        dz,         &         ! PARAMETER   SNOW17
+                        dt,         &         ! PARAMETER   SNOW17
+                        opg,        &         ! PARAMETER   SNOW17
+                        bias,       &         ! PARAMETER   SNOW17
                         uadj,       &         ! PARAMETER   SNOW17
                         mbase,      &         ! PARAMETER   SNOW17
                         mfmax,      &         ! PARAMETER   SNOW17
@@ -29,31 +81,33 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
                         plwhc,      &         ! PARAMETER   SNOW17
                         pxtemp,     &         ! PARAMETER   SNOW17
                         pxtemp1,    &         ! PARAMETER   SNOW17
-                        pxtemp2,    &         ! PARAMETER   SNOW17
-                        sm1max,     &         ! PARAMETER   SNOW17
-                        sm2max,     &         ! PARAMETER   SNOW17
+                        pxtemp2,    &         ! PARAMETER  SNOW17
+                        sm1max,     &         ! PARAMETER   ?
+                        sm2max,     &         ! PARAMETER   ?
                         ku,         &         ! PARAMETER   PERCOLATION
                         c,          &         ! PARAMETER   PERCOLATION
                         sm1Fmax,    &         ! PARAMETER   PERCOLATION  --- OPTIONAL
                         psi,        &         ! PARAMETER   PERCOLATION  --- OPTIONAL
                         alpha,      &         ! PARAMETER   PERCOLATION  --- OPTIONAL
                         ks,         &         ! PARAMETER   BASEFLOW
-                        lambda,     &         ! PARAMETER   BASEFLOW  --- OPTIONAL
-                        lowercasen, &         ! PARAMETER   BASEFLOW  --- OPTIONAL
+                        lam,     &         ! PARAMETER   BASEFLOW  --- OPTIONAL
+                       i lowercasen, &         ! PARAMETER   BASEFLOW  --- OPTIONAL
                         beta,       &         ! PARAMETER   SFROFF
-                        sweVecOutput, &       ! OUTPUT
-                        qVecOutput)          ! OUTPUT
+                        Nr, &
+                        kr, &
+                        qVecOutput, chanVecOutput,sweVecOutput)          ! OUTPUT
 
 
-    ! use soilwater
-    ! use percolation
+
+
+
     use snowmodule17
-    use evaporation
-    use percolation
-    use baseflow
-    use surfacewater
-    use overflow
-    use soilwater
+    ! use percolation
+    ! use evaporation
+    ! use baseflow
+    ! use surfacewater
+    ! use overflow
+    ! use soilwater
 
     ! MODEL RUN OPTIONS
     integer, intent(in) :: SNOWOP
@@ -66,18 +120,19 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
 
     ! MODEL FORCINGS
     integer, intent(in) :: ntimes
-    real, intent(in), dimension(0:ntimes)  :: jday
-    real, intent(in), dimension(0:ntimes)  :: PET
-    real, intent(in), dimension(0:ntimes)  :: tair
-    real, intent(in), dimension(0:ntimes)  :: precip
+    real, intent(in), dimension(ntimes) :: PET
+    real, intent(in), dimension(ntimes) :: jday
+    real, intent(in), dimension(ntimes) :: tair
+    real, intent(in), dimension(ntimes) :: precip ! change this later. for testing purposes
 
-    ! SNOW PARAMETERS
-    real, intent(in) :: dt        ! timestep (hours)
-    real, intent(in) :: elevation ! tens of meters
-    real, intent(in) :: t_base
-    real, intent(in) :: t_power
-    real, intent(in) :: t_melt
-    real, intent(in) :: rvs
+    ! SNOW17 PARAMETERS
+    integer, intent(in) :: nlayers
+    integer, intent(in) :: rvs
+    integer, intent(in) :: opg_method
+    real, intent(in), dimension(nlayers)  :: dz
+    real, intent(in) :: dt
+    real, intent(in) :: opg
+    real, intent(in) :: bias
     real, intent(in) :: uadj
     real, intent(in) :: mbase
     real, intent(in) :: mfmax
@@ -89,32 +144,38 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     real, intent(in) :: pxtemp1
     real, intent(in) :: pxtemp2
 
-    ! SOIL PARAMETERS
+    !SOIL PARAMETERS
     real, intent(in) :: sm1max
     real, intent(in) :: sm2max
 
     ! PERCOLATION PARAMETERS
-    real, intent(in) :: ku                ! Percolation option A,?
-    integer, intent(in) :: c              ! Percolation option A,? exponent
+    real,    intent(in) :: ku                ! Percolation option A,?
+    real, intent(in) :: c              ! Percolation option A,? exponent
     real, intent(in), optional :: sm1Fmax  ! Percolation option C
     real, intent(in), optional :: psi     ! Percolation option C
     real, intent(in), optional :: alpha   ! Percolation option C
 
     ! BASEFLOW PARAMETERS
     real, intent(in) :: ks
-    real, intent(in), optional :: lambda
+    real, intent(in), optional :: lam
     integer, intent(in), optional :: lowercasen
 
     ! SFROFF PARAMETERS
     real, intent(in) :: beta
 
-    ! OUTPUT
-    real, intent(out), dimension(0:ntimes) :: sweVecOutput
-    real, intent(out), dimension(0:ntimes) :: qVecOutput
 
+    ! ROUTING PARAMETERS
+    real, intent(in) :: Nr
+    real, intent(in) :: kr
+
+    ! OUTPUT
+    real, intent(out), dimension(ntimes) :: qVecOutput
+    real, intent(out), dimension(ntimes) :: chanVecOutput
+    real, intent(out), dimension(nlayers,ntimes) :: sweVecOutput
 
     ! INTERNAL
     integer:: i                     ! timestep
+    integer :: ny
     real :: tair_i                  ! forcing-- tair at time i
     real :: precip_i                ! forcing -- precip at time i
     real :: PET_i                   ! forcing -- potential ET at time i
@@ -130,18 +191,28 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     real :: qin                     ! rain + melt
     real :: qif                     ! "interflow" (?)
     real :: qufof                   ! saturation excess flow
+    real :: dsm1dt
+    real :: dsm2dt
+    real, dimension(ntimes) :: htv ! routing kernel
+    real, dimension(ntimes*2-1) :: cnvrt
 
-    real, dimension(0:ntimes) :: meltVec  ! output from snow model (either option)
-    real, dimension(0:ntimes) :: sweVec   ! output from snow model (either option)
+    ! SNOW MODEL INPUTS
+    real, dimension(nlayers,ntimes) :: outflowVec
+    real, dimension(nlayers,ntimes) :: sweVec
+    real, dimension(nlayers,ntimes) :: rainVec
+    real, dimension(nlayers,ntimes) :: ptotVec
 
+    ! Collapse Melt into the single step
+    real, dimension(ntimes) :: outflowVecTotal
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !!           INITIAL CONDITIONS                   !!
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     q0 = 30. ! not sure how to calc this yet
     qif = 0   ! interflow (?) is always zero...
-    sm1 = 100.
-    sm2 = 100.
+    sm1 = 10.
+    sm2 = 200.
+    qsx = 0.0
 
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -156,25 +227,35 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
 
     select case(SNOWOP)
         case(0)
-            call snow17driver(ntimes, jday, precip, tair, &
-                              nlayers, opg, dz, stat_elev, &
-                              dt, &
-                              rvs, &
-                              uadj, &
-                              mbase, &
-                              mfmax, &
-                              mfmin, &
-                              tipm, &
-                              nmf, &
-                              plwhc, &
-                              pxtemp, &
-                              pxtemp1, &
-                              pxtemp2, &
-                              meltVec, &
-                              sweVec)
+
+        call snow17driver(ntimes, jday, precip, tair, & ! INPUTS
+                          nlayers, dz, dt, rvs,                & ! INPUTS
+                          OPG_METHOD, opg, bias, &               ! parameters
+                          uadj, &                                ! parameters
+                          mbase, &                               ! parameters
+                          mfmax, &                               ! parameters
+                          mfmin, &                               ! parameters
+                          tipm, &                                ! parameters
+                          nmf, &                                 ! parameters
+                          plwhc, &                               ! parameters
+                          pxtemp, &                              ! parameters
+                          pxtemp1, &                             ! parameters
+                          pxtemp2, &                             ! parameters
+                          outflowVec, &                          ! OUTPUT
+                          sweVec, &                              !  OUTPUT
+                          rainVec, &
+                          ptotVec)                               !  OUTPUT
+
+        ! print*, "SNOWOP NOT IMPLEMENTED"
+        sweVecOutput = sweVec
         case(1)
-            print*, "NOT IMPLEMENTED"
+            print*, "SNOWOP NOT IMPLEMENTED"
     end select
+
+    ! Compute the total outflow for all snow layers...
+    do i=1,ntimes
+        outflowVecTotal(i) = SUM(outflowVec(:,i))
+    end do
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Begin time stepping (1st order explicit Runge-Kutta)
@@ -182,64 +263,97 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     ! since they all depend on soil water values
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    do i=0,ntimes
+    do i=1,ntimes
         ! get the snowmelt and the rain ...
-        qin = meltVec(i) ! + rain(?)
+        qin = outflowVecTotal(i)/3.0 ! + rain(?)
 
-        ! COMPUTE EVAPORATION
-        select case(ETOP)
-            ! several different case options
-            case(0);  E = ETa(PET(i), sm1, sm1max)  ! this is just a function, not a subroutine
-        end select
+        ! compute PET
+        E = PET(i)*min(sm1,sm1max)/sm1max
 
+        ! Compute Percolation
+        q12 = ku * (sm1/sm1max)**c
 
-        ! COMPUTE PERCOLATION
-        select case(DRAINOP)
-            case(0); q12 = q12a(sm1,  sm1max, ku, c)
-            case(2); q12 = q12c(sm1F, sm1Fmax, q0, sm2, sm2max, psi, alpha)
-        end select
+        ! Compute baseflow
+        qb = ks*(sm2/sm2max)**lowercasen
 
+        ! Compute saturated area
+        Ac = 1 - (1 - sm1/sm1max) ** beta
 
-        ! COMPUTE BASEFLOW
-        select case(BASEOP)
-            case(0);  qb = Qba(sm2, ks)
-            case(1);  qb = Qbb(sm2, sm2max, ks, lowercasen)
-        end select
-
-        ! COMPUTE SURFACE RUNOFF  !
-        ! Select the method for computing the saturated area
-        select case(SATOP)
-            case(0); Ac = satarea_a(sm1, sm1max, beta)
-        end select
-
-        !Now compute the overland flow
+        ! Compute surface runoff
         qsx = Ac*qin
 
-        ! UPDATE SOIL MOISTURE TOP LAYER
-        select case(SMOP1)
-            case(0); call s1_topvic(qin, E, qsx, qif, q12, qufof, sm1)
-        end select
+        ! Update soil moisture in both layers
+        ! top layer change
+        sm1 = sm1 + (qin - qsx) - E - q12 - qif
 
-        ! UPDATE SOIL MOISTURE BOTTOM LAYER
-        select case(SMOP2)
-            case(0); call s2_topprms(q12, qb, sm2)
-        end select
+        ! bottom layer change
+        sm2 = sm2 + q12 - qb
 
-        ! Compute the total q
+        ! store streamflow
         qVecOutput(i) = qb + qsx
+
+    end do
+
+    ! ROUTING MODULE
+    ! now convert qVecOutput to streamflow...
+    do i=1,ntimes
+        htv(i) = ht(REAL(i),Nr,Kr)
+    end do
+
+    ! normalize it by 1 -- so as to not add/subtract flow
+    htv = htv/SUM(htv)
+    ny = ntimes*2-1
+    call convolve(ntimes, ntimes, ny, htv, qVecOutput, cnvrt)
+
+    ! the convolution adds on a bunch of points at hte end that we don't need
+    do i=1,ntimes
+        chanVecOutput(i) = cnvrt(i)
     end do
 
 
+    ! call convolve(nb, nx, ny, bb, xx, yy)
 
-    ! There is now a vector of melt...
 
-    ! if (ETOP == 0) then
-    !     print*, "ETOP 0"
-    ! else if (ETOP == 1) then
-    !     print*, "ETOP 1"
-    ! else
-    !     print*, "NOT IMPLEMENTED"
-    ! end if
+!        print*, sm1, sm2
+        ! ! COMPUTE EVAPORATION
+        ! select case(ETOP)
+        !     ! several different case options
+        !     case(0);  E = ETa(PET(i), sm1, sm1max)  ! this is just a function, not a subroutine
+        ! end select
+
+
+        ! ! COMPUTE PERCOLATION
+        ! select case(DRAINOP)
+        !     case(0); q12 = q12a(sm1,  sm1max, ku, c)
+        !     case(2); q12 = q12c(sm1F, sm1Fmax, q0, sm2, sm2max, psi, alpha)
+        ! end select
+
+
+        ! ! COMPUTE BASEFLOW
+        ! select case(BASEOP)
+        !     case(0);  qb = Qba(sm2, ks)
+        !     case(1);  qb = Qbb(sm2, sm2max, ks, lowercasen)
+        ! end select
+
+        ! ! COMPUTE SURFACE RUNOFF  !
+        ! ! Select the method for computing the saturated area
+        ! select case(SATOP)
+        !     case(0); Ac = satarea_a(sm1, sm1max, beta)
+        ! end select
+
+        ! !Now compute the overland flow
+        ! qsx = Ac*qin
+
+        ! ! UPDATE SOIL MOISTURE TOP LAYER
+        ! select case(SMOP1)
+        !     case(0); call s1_topvic(qin, E, qsx, qif, q12, qufof, sm1)
+        ! end select
+
+        ! ! UPDATE SOIL MOISTURE BOTTOM LAYER
+        ! select case(SMOP2)
+        !     case(0); call s2_topprms(q12, qb, sm2)
+        ! end select
+
 
 
 
@@ -247,23 +361,10 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
 !  print*, params%nmf
 
 end subroutine model_driver
+
+
 end module driver
 
-
-
-
-
-! ! Unit test !!!!!
-! program test
-! use driver
-! implicit none
-
-
-
-
-
-
-! end program test
 
 
 

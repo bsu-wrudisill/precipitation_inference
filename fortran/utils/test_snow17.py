@@ -15,6 +15,7 @@ mpl.use('Qt5Agg')
 import pathlib
 import xarray as xr
 import scipy.optimize
+import pickle
 
 
 ##################################################################################################################
@@ -22,8 +23,8 @@ import scipy.optimize
 ########                                                                                                  ########
 ##################################################################################################################
 
-start_date = "1990-10-01"
-end_date = "2020-09-30"
+start_date = "2000-10-01"
+end_date = "2010-09-30"
 
 data_base = "/Users/williamrudisill/Documents/Conceptual_Runoff_Model/data/"
 
@@ -46,13 +47,13 @@ jdays = dates.dayofyear.values * 1.0
 def objective_function(snotel_swe, fx, x):
   # compute the error in the model based on snotel
   # and ASO overflights ....
-  swe,m = fx(x)
+  m,swe,rain,ptot = fx(x)
   snotel_error = np.sqrt(np.mean((swe[0] - snotel_swe)**2))
   return snotel_error
 
 
 def snow17_caller_01(jdays, daily_precip, daily_temp, x):
-  swe,m = sm17.snow17driver(jdays,
+  swe,m,rain,ptot = sm17.snow17driver(jdays,
                             daily_precip,
                             daily_temp,
                             nlayers=1,
@@ -60,8 +61,10 @@ def snow17_caller_01(jdays, daily_precip, daily_temp, x):
                             dt=24,
                             rvs=1,
                             opg_method=1,
-                            opg=.0021,
-                            bias=x[0],
+                            #opg=.0021,
+                            opg=0.00178704,
+                            bias=1.50933292,
+#                            bias=x[0],
                             uadj=x[1],
                             mbase=x[2],
                             mfmax=x[3],
@@ -72,7 +75,7 @@ def snow17_caller_01(jdays, daily_precip, daily_temp, x):
                             pxtemp=x[8],
                             pxtemp1=x[9],
                             pxtemp2=x[10])
-  return swe,m
+  return swe,m,rain,ptot
 
 # this packs in all of the forcing data.. so now the function is just of x
 snow17_caller_a = lambda x: snow17_caller_01(jdays, daily_precip, daily_temp, x)
@@ -99,21 +102,18 @@ snow17objective_fun = lambda x: objective_function(daily_swe, snow17_caller_a, x
 result1 = scipy.optimize.minimize(snow17objective_fun, x0, method='Nelder-Mead', options={"disp":True})
 # result2 = scipy.optimize.minimize(snow17objective_fun, x0, method='Nelder-Mead', options={"maxiter":5000, "disp":True})
 
-swe0,m0 = snow17_caller_a(x0)
-swe1,m2 = snow17_caller_a(result1.x)
+m0,swe0,rain0,ptot0 = snow17_caller_a(x0)
+m1,swe1,rain1,ptot1 = snow17_caller_a(result1.x)
 #swe2,m2 = snow17_caller(jdays, daily_precip, daily_temp, result2.x)
 
 # save the parameters for the next calibration step ...
 x1 = result1.x
 # plt.plot(dates, daily_swe.values, linestyle='--', color='black', label='Butte Snotel')
+# plt.plot(dates, swe0[0], color='orange', label="snow17-initial")#, label="calibrated -- Powel")
 # plt.plot(dates, swe1[0], color='purple', label="snow17-calibrated")#, label="calibrated -- Powel")
-# sys.exit()
 
 
-# # plt.plot(dates, swe2[0], color='orange', label="calibrated -- NM")
-# # plt.plot(dates, swe0[0], color='blue', alpha=.75, label="uncalibrated")
-# plt.legend()
-# plt.savefig("snow17-snotel-calibrated")
+
 # sys.exit()
 
 
@@ -189,7 +189,7 @@ d4ind = (pd.to_datetime(aso_date04) - pd.to_datetime(start_date)).days
 
 
 def snow17_caller_02(jdays, daily_precip, daily_temp, x0, x):
-  swe,m = sm17.snow17driver(jdays,
+  m,swe,rain,ptot = sm17.snow17driver(jdays,
                             daily_precip,
                             daily_temp,
                             nlayers=3,
@@ -209,14 +209,14 @@ def snow17_caller_02(jdays, daily_precip, daily_temp, x0, x):
                             pxtemp=x0[8],
                             pxtemp1=x0[9],
                             pxtemp2=x0[10])
-  return swe,m
+  return m,swe,rain,ptot
 
 
 snow17_caller_b = lambda x: snow17_caller_02(jdays, daily_precip, daily_temp, x1, x)
 
 def objective_function(snotel_swe, fx, x, alpha=.1, beta=.9):
 
-  mod_swe,melt= fx(x)
+  m,mod_swe,rain,ptot= fx(x)
   # compute the error in the model based on snotel
   # and ASO overflights ....
   #snotel_error = np.sqrt(np.mean((mod_swe[1] - snotel_swe)**2))
@@ -248,10 +248,10 @@ def objective_function(snotel_swe, fx, x, alpha=.1, beta=.9):
 #snow17_caller_02x = lambda jdays, daily_precip, daily_temp, x: snow17_caller_02(jdays, daily_precip, daily_temp, x0, x1)
 
 snow17objective_fun = lambda x: objective_function(daily_swe, snow17_caller_b, x)
-result = scipy.optimize.minimize(snow17objective_fun, [.002, 0.], method='Powell', options={"maxiter":5000, "disp":True})
+result2 = scipy.optimize.minimize(snow17objective_fun, [.002, 0.], method='Powell', options={"maxiter":5000, "disp":True})
 
 
-swe,m = snow17_caller_b(result.x)
+m,swe,rain,ptot = snow17_caller_b(result2.x)
 
 # plot the results
 plt.plot(dates, swe[0], label=heights[0], color='gray', alpha=.5)
@@ -287,9 +287,21 @@ plt.scatter([pd.to_datetime(aso_date04)]*nlayers,
 
 
 
-# SAVE THE FINAL PARAMETERS
 plt.legend()
 plt.show()
-# Get the ASO mean swe for the different bands
 
+
+# SAVE THE FINAL PARAMETERS
+model_parameters_updated = model_parameters
+
+# update the model params
+for i,k in enumerate(model_parameters_updated.keys()):
+    model_parameters_updated.update({k:result1.x[i]})
+
+# this wasn't one of the original ones...
+model_parameters_updated['opg'] = result2.x[0]
+model_parameters_updated['bias'] = result2.x[1]
+
+pklbuf = open('snow17params.pkl', 'wb')
+pickle.dump(model_parameters_updated, pklbuf)
 
