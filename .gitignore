@@ -8,4 +8,6 @@ output
 *.npy
 *.mod
 *.o
-
+*.ipynb_checkpoints*
+*.DS_store
+*.pymc_1*
