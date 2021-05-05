@@ -76,11 +76,11 @@ subroutine snow17(jday, &
                   pxtemp2, &
                   swe, &
                   ait, &
-                  w_qx, &
                   w_q, &
                   w_i, &
                   deficit, &
-                  melt_outflow)
+                  outflow, &  !ouput
+                  rain)       !output
 
     implicit none
 
@@ -105,21 +105,23 @@ subroutine snow17(jday, &
     ! inouts (snow states. these can change)
     real, intent(inout) :: swe
     real, intent(inout) :: ait
-    real, intent(inout) :: w_qx
     real, intent(inout) :: w_q
     real, intent(inout) :: w_i
     real, intent(inout) :: deficit
-    real, intent(out) :: melt_outflow
+
+    ! OUTPUT VARIABLES-- snowmelt and rain
+    real, intent(out) :: outflow
+    real, intent(out) :: rain
 
 
     !!!!! Declare f2py outputs... inout will not return anything in python
     !!!!! ----------------------------------------------------------------
-    !f2py intent(in,out) :: swe
-    !f2py intent(in,out) :: ait
-    !f2py intent(in,out) :: w_qx
-    !f2py intent(in,out) :: w_q
-    !f2py intent(in,out) :: w_i
-    !f2py intent(in,out) :: deficit
+    !!!! f2py intent(in,out) :: swe    (only implemented w/ one comment )
+    !!!! f2py intent(in,out) :: ait    (only implemented w/ one comment )
+    !!!! f2py intent(in,out) :: w_qx    (only implemented w/ one comment )
+    !!!! f2py intent(in,out) :: w_q    (only implemented w/ one comment )
+    !!!! f2py intent(in,out) :: w_i    (only implemented w/ one comment )
+    !!!! f2py intent(in,out) :: deficit    (only implemented w/ one comment )
 
     ! internal
     real, dimension(2) :: transitionx
@@ -129,7 +131,7 @@ subroutine snow17(jday, &
     real :: mf
     real :: tipm_dt
     real :: pn
-    real :: rain
+    real :: w_qx
     real :: delta_hd_snow
     real :: fracrain
     real :: fracsnow
@@ -142,9 +144,12 @@ subroutine snow17(jday, &
     real :: m_ros2
     real :: m_ros3
     real :: m_nr
-    real :: qw
+    real :: qw    ! liquid water held by snow
+    real :: melt  ! snow melt
+    real :: ex_lw ! excess liqud water
+    real :: k
 
-!!!!!    !f2py intent(in,out) :: e_sat
+    !!!!!    !f2py intent(in,out) :: e_sat
 
     ! BEGIN
     ! ------
@@ -163,14 +168,15 @@ subroutine snow17(jday, &
     ! (this is incorrectly stated in the manual)
     p_atm = 33.86 * (29.9 - (0.335 * elevation / 100) + (0.00022 * ((elevation / 100) ** 2.4)))
 
-    ! what's happening here?
+    ! temperature index constant used to compute snow temperature index (ait).
+    ! notice this only depends on the input parameters tipm and dt
     tipm_dt = 1.0 - ((1.0 - tipm) ** (dt / 6))
 
-    ! Loop over time dimension
+    ! compute melt function
     mf = melt_function(jday, dt, mfmax, mfmin)
 
-    !!!air temperature at this time step (deg C)
-
+    ! saturated vapor pressure at tair (mb)
+    e_sat = 2.7489 * (10 ** 8) * EXP((-4278.63 / (tair + 242.792)))
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !  Select the 'rain versus snow' method !
@@ -194,23 +200,32 @@ subroutine snow17(jday, &
          else if (tair >= pxtemp2) then
              fracsnow = 0.0
          else
+
              ! Linear interpolate between 0 and 1
              fracsnow  = (tair - pxtemp1)/(pxtemp2 - pxtemp1)
+
+             ! Make sure that fracsnow is between 0 and 1
+             if (fracsnow > 1.) then
+                 fracsnow = 1.
+             else if (fracsnow < 0.) then
+                 fracsnow = 0.
+             end if
+
          end if
     end select
 
    ! now move on...
    fracrain = 1.0 - fracsnow
 
-   ! snow
-   pn = precip * fracsnow !* scf -- get rid of this part. undercatch factor
+   ! snow phase of the precipitation
+   pn = precip * fracsnow !* scf --  we are not using an undercatch factor (yet)
 
-   ! not sure what these are (yet)
-   w_i =  w_i + pn
-   melt_outflow = 0.0
-
-   ! amount of precip (mm) that is rain during this time step
+   ! rain phase of the precipitaiton
    rain = fracrain * precip
+
+   ! wi is the accumulated swe stored in the ice portion of the snowpack
+   ! (as opposed to liqiud water suspended)
+   w_i =  w_i + pn
 
    ! Temperature and Heat deficit from new Snow
    ! The new snow temperature will be, at a minimum, zero
@@ -226,118 +241,151 @@ subroutine snow17(jday, &
    end if
 
 
-  ! Antecedent temperature Index
+  ! Antecedent Temperature Index (ait)
   if (pn > (1.5 * dt)) then
       ait = t_snow_new
   else
       ait = ait + tipm_dt * (tair - ait)
   end if
 
+  ! ensure that ait is always negative
   if (ait > 0) then
       ait = 0
   end if
 
   ! heat deficit
+  ! this is the change in heat deficit caused by the temperature gradient (sensible heat...)
+  ! *nmf* is an input parameter controlling this exchange
+  ! notice that the melt factor (mf) also goes in here
   delta_hd_t = nmf * (dt / 6.0) * ((mf) / mfmax) * (ait - t_snow_new)
 
-  ! saturated vapor pressure at tair (mb)
-  e_sat = 2.7489 * (10 ** 8) * EXP((-4278.63 / (tair + 242.792)))
-  ! Rain-on-snow melt_outflow
-  if (rain  > (0.25 * dt)) then
-    !melt_outflow (mm) during rain-on-snow periods is:
-    m_ros1 = MAX(stefan * dt * (((tair + 273.0) ** 4) - (273.0 ** 4)), 0.0)
-    m_ros2 = MAX(0.0125 * rain * t_rain, 0.0)
-    m_ros3 = MAX(8.5 * uadj * dt / 6.0 * ((0.9 * e_sat) - 6.11) +  (0.00057 * p_atm * tair), 0.0)
-    m_ros = m_ros1 + m_ros2 + m_ros3
+
+  ! Compute Rain-on-snow melt and Non-Rain Melt
+  ! First, check if there is ice with which to melt...
+  if (w_i > 0.) then
+    !-----------------------------------------------------------------
+    ! Rain-On-Snow Melt
+    ! two options -- rain is intense enough for extra ROS melt or not
+    !-----------------------------------------------------------------
+
+    ! 1) if rain exceeds .25 mm/hour, then compute ROS melt
+    ! notice that this function does not account for the amount
+    ! of snow/heat content of the pack....
+    if (rain  > (0.25 * dt)) then
+      !melt (mm) during rain-on-snow periods is:
+      m_ros1 = MAX(stefan * dt * (((tair + 273.0) ** 4) - (273.0 ** 4)), 0.0)
+      m_ros2 = MAX(0.0125 * rain * t_rain, 0.0)
+      m_ros3 = MAX(8.5 * uadj * dt / 6.0 * ((0.9 * e_sat) - 6.11) +  (0.00057 * p_atm * tair), 0.0)
+      m_ros = m_ros1 + m_ros2 + m_ros3
+
+    ! 2) no rain on snow melt if the rain isn't intense enough
+    else
+      m_ros = 0.0
+    end if
+
+    !-----------------------------------------------------------------
+    ! Non-Rain Melt
+    ! two options -- rain is intense enough for extra ROS melt or not
+    !-----------------------------------------------------------------
+    if (rain <= (0.25 * dt).and.(tair > mbase)) then
+        ! melt during non-rain periods is:
+        m_nr = (mf * (tair - mbase)) + (0.0125 * rain * t_rain)
+    else
+        m_nr = 0.0
+    end if
+
+  ! Set melt to zero if there's no snow
   else
     m_ros = 0.0
-  end if
-
-  ! Non-Rain melt_outflow
-  if (rain <= (0.25 * dt).and.(tair > mbase)) then
-      ! melt_outflow during non-rain periods is:
-      m_nr = (mf * (tair - mbase)) + (0.0125 * rain * t_rain)
-  else
-      m_nr = 0.0
+    m_nr = 0.0
   end if
 
 
   ! Ripeness of the snow cover
-  melt_outflow = m_ros + m_nr
-  if (melt_outflow <= 0) then
-      melt_outflow = 0.0
+  melt = m_ros + m_nr
+  if (melt <= 0) then
+      melt = 0.0
   end if
 
-  if (melt_outflow < w_i) then
-      w_i = w_i - melt_outflow
+  if (melt < w_i) then
+      w_i = w_i - melt
   else
-      melt_outflow = w_i + w_q
+      melt = w_i + w_q
       w_i = 0.0
   end if
 
-  !qw = liquid water available melt_outflowed/rained at the snow surface (mm)
-  qw = melt_outflow + rain
+  !qw = liquid water available melted/rained at the snow surface (mm)
+  qw = melt + rain
+
   ! w_qx = liquid water capacity (mm)
   w_qx = plwhc * w_i
+
   ! deficit = heat deficit (mm)
   deficit = deficit + delta_hd_snow + delta_hd_t
 
-  ! limits of heat deficit
+  ! Determine limits of the heat deficit
   if (deficit < 0) then
       deficit = 0.0
   else if (deficit > (0.33 * w_i)) then
       deficit = 0.33 * w_i
   end if
 
-  !!!
-  ! Snow cover is ripe when both (deficit=0) & (w_q = w_qx)
+  ! define the heat deficit + liquid water storage capacity
+  ! !!!! why does it look like this exactly? !!!!
+  k = deficit * (1 + plwhc) + w_qx
+
+  ! If there is liquid stored as ice... ie a snowpack exists
   if (w_i > 0.0) then
-      if ((qw + w_q) > ((deficit * (1 + plwhc)) + w_qx)) then
-          ! # THEN the snow is RIPE
+
+      ! Case 1) Snow cover is completely "Ripe"
+      if ((qw + w_q) > k) then
+          ! Then the snow is RIPE
           ! # Excess liquid water (mm)
-          melt_outflow = qw + w_q - w_qx - (deficit * (1 + plwhc))
+          ex_lw = qw + w_q - w_qx - (deficit * (1 + plwhc))
           ! # fills liquid water capacity
           w_q = w_qx
           ! # w_i increases because water refreezes as heat deficit is
           ! # decreased
           w_i = w_i + deficit
           deficit = 0.0
-      else if ((qw >= deficit).and.( (qw + w_q) <= (deficit * (1 + plwhc) + w_qx))) then
-          ! # THEN the snow is NOT yet ripe, but ice is being melt_outflowed
-          melt_outflow = 0.0
+
+      ! Case 2) The snow is NOT yet ripe, but ice is being melted
+      else if ((qw >= deficit).and.((qw + w_q) <= k)) then
+          ex_lw = 0.0
           w_q = w_q + qw - deficit
           ! # w_i increases because water refreezes as heat deficit is
           ! # decreased
           w_i = w_i + deficit
           deficit = 0.0
 
+      ! Case 3) Snow is not yet ripe
       else
-          ! # (qw < deficit) %elseif ((qw + w_q) < deficit):
-          ! # THEN the snow is NOT yet ripe
-          melt_outflow = 0.0
-          ! # w_i increases because water refreezes as heat deficit is
-          ! # decreased
+          ex_lw = 0.0  ! there is no excess liquid water
+          ! w_i increases because water refreezes as heat deficit is decreased
           w_i = w_i + qw
           deficit = deficit - qw
-
       end if
-      ! now update swe
+
+      ! Update the SWE, which is the sum of liquid + ice phase water
       swe = w_i + w_q
-  ! if there is no water input (w_i)
+
+  ! Otherwise, there is no snowpack! melt
   else
-      melt_outflow = qw
+      ! all of the ice is gone... so there is also no liquid
+      ! water stored in the pack....
+      w_q = 0
+      ex_lw = qw
       swe = 0
   end if
 
-!  deficit...
+  ! deficit...
   if (deficit == 0) then
       ait = 0
   end if
 
   ! End of model execution
-  !model_swe = swe  ! total swe (mm) at this time step
-  !melt_outflow = e
-
+  ! model_swe = swe  ! total swe (mm) at this time step
+  outflow = ex_lw
 
 end subroutine snow17
 
@@ -356,8 +404,9 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, & ! INPUTS
                         pxtemp, &                              ! parameters
                         pxtemp1, &                             ! parameters
                         pxtemp2, &                             ! parameters
-                        melt_outflowVec, &                     ! OUTPUT
-                        sweVec)                                !  OUTPUT
+                        outflowVec, &                          ! OUTPUT
+                        sweVec, &                              !  OUTPUT
+                        rainVec, ptotVec)                                !  OUTPUT
 
                         implicit none
 
@@ -391,8 +440,11 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, & ! INPUTS
                         real, intent(in) :: pxtemp2
 
                         ! OUTPUTS
-                        real, intent(out), dimension(nlayers,ntimes) :: melt_outflowVec
+                        real, intent(out), dimension(nlayers,ntimes) :: outflowVec
                         real, intent(out), dimension(nlayers,ntimes) :: sweVec
+                        real, intent(out), dimension(nlayers,ntimes) :: rainVec
+                        real, intent(out), dimension(nlayers,ntimes) :: ptotVec
+
 
                         !internal
 
@@ -402,15 +454,15 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, & ! INPUTS
                         real, parameter :: opg_lower_adj = .25  ! reduced the opg gradient for lower stations
                         real  :: swe
                         real  :: ait
-                        real  :: w_qx
                         real  :: w_q
                         real  :: w_i
                         real  :: deficit
-                        real  :: melt
-                        real  :: elevation
+                        real  :: outflow
+                        real :: elevation
                         real :: precip_il ! precipitation in the lth layer
                         real :: temp_il
-                        real ::  opg_adjusted
+                        real :: opg_adjusted
+                        real :: rain
 
                         ! misc
                         integer :: i   ! for time loop
@@ -423,11 +475,10 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, & ! INPUTS
                           ait = 0.
                           swe = 0.
                           ait = 0.
-                          w_qx = 0.
                           w_q = 0.
                           w_i = 0.
                           deficit = 0.
-                          melt = 0
+                          outflow = 0.
 
                           ! midpoint elevation ...
                           elevation = stat_elev + dz(l)/100 ! elevation is in units of 100s of meters for whatever reason...
@@ -491,15 +542,18 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, & ! INPUTS
                                         pxtemp2, &
                                         swe, &
                                         ait, &
-                                        w_qx, &
                                         w_q, &
                                         w_i, &
                                         deficit, &
-                                        melt)
+                                        outflow, &  ! out
+                                        rain)       ! out
 
                             ! store the data...
-                            melt_outflowVec(l,i) = swe
-                            sweVec(l,i) = melt
+                            outflowVec(l,i) = outflow
+                            sweVec(l,i) = swe
+                            rainVec(l,i) = rain
+                            ptotVec(l,i) = precip_il
+
                         end do
                       end do
 
