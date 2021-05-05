@@ -21,7 +21,6 @@ subroutine convolve(nb, nx, ny, bb, xx, yy)
     !integer, dimension(ny) :: yy
 
     yy = 0.0
-    print*, nb,nx,ny
     !ny = nx + nb -1
     do ib = 1, nb
         do ix = 1, nx
@@ -91,7 +90,7 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
                         alpha,      &         ! PARAMETER   PERCOLATION  --- OPTIONAL
                         ks,         &         ! PARAMETER   BASEFLOW
                         lam,     &         ! PARAMETER   BASEFLOW  --- OPTIONAL
-                       i lowercasen, &         ! PARAMETER   BASEFLOW  --- OPTIONAL
+                        lowercasen, &         ! PARAMETER   BASEFLOW  --- OPTIONAL
                         beta,       &         ! PARAMETER   SFROFF
                         Nr, &
                         kr, &
@@ -149,16 +148,16 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     real, intent(in) :: sm2max
 
     ! PERCOLATION PARAMETERS
-    real,    intent(in) :: ku                ! Percolation option A,?
-    real, intent(in) :: c              ! Percolation option A,? exponent
+    real,    intent(in) :: ku              ! Percolation option A,?
+    real, intent(in) :: c                  ! Percolation option A,? exponent
     real, intent(in), optional :: sm1Fmax  ! Percolation option C
-    real, intent(in), optional :: psi     ! Percolation option C
-    real, intent(in), optional :: alpha   ! Percolation option C
+    real, intent(in), optional :: psi      ! Percolation option C
+    real, intent(in), optional :: alpha    ! Percolation option C
 
     ! BASEFLOW PARAMETERS
     real, intent(in) :: ks
     real, intent(in), optional :: lam
-    integer, intent(in), optional :: lowercasen
+    real, intent(in), optional :: lowercasen
 
     ! SFROFF PARAMETERS
     real, intent(in) :: beta
@@ -210,8 +209,8 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     q0 = 30. ! not sure how to calc this yet
     qif = 0   ! interflow (?) is always zero...
-    sm1 = 10.
-    sm2 = 200.
+    sm1 = 100.
+    sm2 = 700.
     qsx = 0.0
 
 
@@ -274,10 +273,11 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
         q12 = ku * (sm1/sm1max)**c
 
         ! Compute baseflow
-        qb = ks*(sm2/sm2max)**lowercasen
+        qb = MIN(sm2, ks*(sm2/sm2max)**lowercasen)
 
         ! Compute saturated area
         Ac = 1 - (1 - sm1/sm1max) ** beta
+        print*, Ac
 
         ! Compute surface runoff
         qsx = Ac*qin

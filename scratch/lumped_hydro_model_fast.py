@@ -5,8 +5,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-import metpy.calc as mpcalc
-from metpy.units import units
 import sys
 import time
 
@@ -183,7 +181,6 @@ def one_time_forward(nLayers,         # number of layers for the snow model
 
         # Compute the snowmelt
         # compute ddpar first
-        print(T30[k], t_base, t_power)
         ddpar = DDPar_Calc(T30[k], t_base, t_power)
         Mdk = Ms(Td[k], Snow[k], t_melt, ddpar)
 

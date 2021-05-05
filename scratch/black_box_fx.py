@@ -1,3 +1,8 @@
+"""
+Example of using a "black box" function with PyMC3
+"""
+
+
 import numpy as np
 import pymc3 as pm
 import theano

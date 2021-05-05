@@ -103,62 +103,66 @@ pxtemp1 = snow17params.get('pxtemp1')#-1.                    #         ! PARAMET
 pxtemp2 = snow17params.get('pxtemp2')#3.                     #         ! PARAMETER   SNOW17
 
 # hydrologic model parameters ...
-sm1max = 200.                    #         ! PARAMETER   ?
-sm2max = 3000.                   #         ! PARAMETER   ?
-ku = .01                         #         ! PARAMETER   PERCOLATION
+sm1max = 800.                    #         ! PARAMETER   ?
+sm2max = 800.                   #         ! PARAMETER   ?
+ku = .8                         #         ! PARAMETER   PERCOLATION
 c = 1.                           #         ! PARAMETER   PERCOLATION
 sm1Fmax = 240                    #         ! PARAMETER   PERCOLATION  --- OPTIONAL
 psi = .1                         #         ! PARAMETER   PERCOLATION  --- OPTIONAL
 alpha = .1                       #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-ks = .4                          #         ! PARAMETER   BASEFLOW
+ks = .99                          #         ! PARAMETER   BASEFLOW
 lam = .1                         #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-lowercasen = 1.                  #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-beta = 1.5                       #         ! PARAMETER   SFROFF
+lowercasen = 2.0                  #         ! PARAMETER   BASEFLOW  --- OPTIONAL
+beta = .6                       #         ! PARAMETER   SFROFF
 nr = 2.
 kr = 2.9
 
-foo = dr.model_driver(snowop   = SNOWOP,     #         ! OPTION   SNOW option
-                      etop     = ETOP,       #         ! OPTION   Percolation option
-                      drainop  = DRAINOP,    #         ! OPTION   Snow option
-                      satop    = SATOP,      #         ! OPTION   Saturated Area Option
-                      baseop   = BASEOP,     #         ! OPTION   Surface Runoff option
-                      smop1    = SMOP1,      #         ! OPTION   Soil Water Option -- Top
-                      smop2    = SMOP2,      #         ! OPTION   Soil Water Option -- Bottom
-                      ntimes   = ntimes,     #         ! FORCING   Number of model timesteps
-                      pet        = PET,        #         ! FORCING   Potential Evapotranspiratio
-                      jday       = jday,       #         ! FORCING   Day of Year
-                      tair       = tair,       #         ! FORCING   Air Temperature, length N
-                      precip     = precip,     #         ! FORCING   Precipitation, length N
-                      nlayers    = nlayers,    #         ! PARAMETER   SNOW17
-                      rvs        = rvs,        #         ! PARAMETER   SNOW17
-                      opg_method = opg_method, #         ! PARAMETER   SNOW17
-                      dz         = dz,         #         ! PARAMETER   SNOW17
-                      dt         = dt,         #         ! PARAMETER   SNOW17
-                      opg        = opg,        #         ! PARAMETER   SNOW17
-                      bias       = bias,       #         ! PARAMETER   SNOW17
-                      uadj       = uadj,       #         ! PARAMETER   SNOW17
-                      mbase      = mbase,      #         ! PARAMETER   SNOW17
-                      mfmax      = mfmax,      #         ! PARAMETER   SNOW17
-                      mfmin      = mfmin,      #         ! PARAMETER   SNOW17
-                      tipm       = tipm,       #         ! PARAMETER   SNOW17
-                      nmf        = nmf,        #         ! PARAMETER   SNOW17
-                      plwhc      = plwhc,      #         ! PARAMETER   SNOW17
-                      pxtemp     = pxtemp,     #         ! PARAMETER   SNOW17
-                      pxtemp1    = pxtemp1,    #         ! PARAMETER   SNOW17
-                      pxtemp2    = pxtemp2,     #           ! PARAMETER   SNOW17
-                      sm1max     = sm1max,        #         ! PARAMETER   ?
-                      sm2max     = sm2max,       #         ! PARAMETER   ?
-                      ku         = ku,           #         ! PARAMETER   PERCOLATION
-                      c          = c,            #         ! PARAMETER   PERCOLATION
-                      sm1fmax    = sm1Fmax,      #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-                      psi        = psi,          #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-                      alpha      = alpha,        #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-                      ks         = ks,           #         ! PARAMETER   BASEFLOW
-                      lam        = lam,      #        ! PARAMETER   BASEFLOW  --- OPTIONAL
-                      lowercasen = lowercasen,   #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-                      beta       = beta,         #         ! PARAMETER   SFROFF
-                      nr         = nr,
-                      kr         = kr)
+#for sm1max in np.arange(100., 1000., 50.):
+for sm2max in [800.]:
+  foo = dr.model_driver(snowop   = SNOWOP,     #         ! OPTION   SNOW option
+                        etop     = ETOP,       #         ! OPTION   Percolation option
+                        drainop  = DRAINOP,    #         ! OPTION   Snow option
+                        satop    = SATOP,      #         ! OPTION   Saturated Area Option
+                        baseop   = BASEOP,     #         ! OPTION   Surface Runoff option
+                        smop1    = SMOP1,      #         ! OPTION   Soil Water Option -- Top
+                        smop2    = SMOP2,      #         ! OPTION   Soil Water Option -- Bottom
+                        ntimes   = ntimes,     #         ! FORCING   Number of model timesteps
+                        pet        = PET,        #         ! FORCING   Potential Evapotranspiratio
+                        jday       = jday,       #         ! FORCING   Day of Year
+                        tair       = tair,       #         ! FORCING   Air Temperature, length N
+                        precip     = precip,     #         ! FORCING   Precipitation, length N
+                        nlayers    = nlayers,    #         ! PARAMETER   SNOW17
+                        rvs        = rvs,        #         ! PARAMETER   SNOW17
+                        opg_method = opg_method, #         ! PARAMETER   SNOW17
+                        dz         = dz,         #         ! PARAMETER   SNOW17
+                        dt         = dt,         #         ! PARAMETER   SNOW17
+                        opg        = opg,        #         ! PARAMETER   SNOW17
+                        bias       = bias,       #         ! PARAMETER   SNOW17
+                        uadj       = uadj,       #         ! PARAMETER   SNOW17
+                        mbase      = mbase,      #         ! PARAMETER   SNOW17
+                        mfmax      = mfmax,      #         ! PARAMETER   SNOW17
+                        mfmin      = mfmin,      #         ! PARAMETER   SNOW17
+                        tipm       = tipm,       #         ! PARAMETER   SNOW17
+                        nmf        = nmf,        #         ! PARAMETER   SNOW17
+                        plwhc      = plwhc,      #         ! PARAMETER   SNOW17
+                        pxtemp     = pxtemp,     #         ! PARAMETER   SNOW17
+                        pxtemp1    = pxtemp1,    #         ! PARAMETER   SNOW17
+                        pxtemp2    = pxtemp2,     #           ! PARAMETER   SNOW17
+                        sm1max     = sm1max,        #         ! PARAMETER   ?
+                        sm2max     = sm2max,       #         ! PARAMETER   ?
+                        ku         = ku,           #         ! PARAMETER   PERCOLATION
+                        c          = c,            #         ! PARAMETER   PERCOLATION
+                        sm1fmax    = sm1Fmax,      #         ! PARAMETER   PERCOLATION  --- OPTIONAL
+                        psi        = psi,          #         ! PARAMETER   PERCOLATION  --- OPTIONAL
+                        alpha      = alpha,        #         ! PARAMETER   PERCOLATION  --- OPTIONAL
+                        ks         = ks,           #         ! PARAMETER   BASEFLOW
+                        lam        = lam,      #        ! PARAMETER   BASEFLOW  --- OPTIONAL
+                        lowercasen = lowercasen,   #         ! PARAMETER   BASEFLOW  --- OPTIONAL
+                        beta       = beta,         #         ! PARAMETER   SFROFF
+                        nr         = nr,
+                        kr         = kr)
+  plt.plot(foo[1], label=sm2max)
+
 
 # # routing function...
 # def ht(t, k=3.5, N=4):
@@ -173,8 +177,9 @@ foo = dr.model_driver(snowop   = SNOWOP,     #         ! OPTION   SNOW option
 # c=dr.convolve(nx=nx, nb=nb, ny=ny, bb=uht, xx=foo)
 
 #plt.plot(foo[0])
-plt.plot(foo[1])
-plt.plot(q.values)
+#plt.plot(foo[1])
+plt.plot(q.values, linestyle='--')
+plt.legend()
 plt.show()
 
 #np.convolve(uht,foo)
