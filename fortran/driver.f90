@@ -81,6 +81,8 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
                         pxtemp,     &         ! PARAMETER   SNOW17
                         pxtemp1,    &         ! PARAMETER   SNOW17
                         pxtemp2,    &         ! PARAMETER  SNOW17
+                        sm1i,       &         ! INTITIAL SM CONDITION
+                        sm2i,       &         ! INTITIAL SM CONDITION
                         sm1max,     &         ! PARAMETER   ?
                         sm2max,     &         ! PARAMETER   ?
                         ku,         &         ! PARAMETER   PERCOLATION
@@ -89,12 +91,12 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
                         psi,        &         ! PARAMETER   PERCOLATION  --- OPTIONAL
                         alpha,      &         ! PARAMETER   PERCOLATION  --- OPTIONAL
                         ks,         &         ! PARAMETER   BASEFLOW
-                        lam,     &         ! PARAMETER   BASEFLOW  --- OPTIONAL
+                        lam,        &         ! PARAMETER   BASEFLOW  --- OPTIONAL
                         lowercasen, &         ! PARAMETER   BASEFLOW  --- OPTIONAL
                         beta,       &         ! PARAMETER   SFROFF
                         Nr, &
                         kr, &
-                        qVecOutput, chanVecOutput,sweVecOutput)          ! OUTPUT
+                        qVecOutput, chanVecOutput, qbVecOutput, qsxVecOutput, eVecOutput, qinOutput)          ! OUTPUT
 
 
 
@@ -144,6 +146,8 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     real, intent(in) :: pxtemp2
 
     !SOIL PARAMETERS
+    real, intent(in) :: sm1i
+    real, intent(in) :: sm2i
     real, intent(in) :: sm1max
     real, intent(in) :: sm2max
 
@@ -170,7 +174,12 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     ! OUTPUT
     real, intent(out), dimension(ntimes) :: qVecOutput
     real, intent(out), dimension(ntimes) :: chanVecOutput
-    real, intent(out), dimension(nlayers,ntimes) :: sweVecOutput
+    real, intent(out), dimension(ntimes) :: qbVecOutput
+    real, intent(out), dimension(ntimes) :: qsxVecOutput
+    real, intent(out), dimension(ntimes) :: eVecOutput
+    real, intent(out), dimension(ntimes) :: qinOutput
+
+    !real, intent(out), dimension(nlayers,ntimes) :: sweVecOutput
 
     ! INTERNAL
     integer:: i                     ! timestep
@@ -207,10 +216,10 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !!           INITIAL CONDITIONS                   !!
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    q0 = 30. ! not sure how to calc this yet
-    qif = 0   ! interflow (?) is always zero...
-    sm1 = 100.
-    sm2 = 700.
+    q0 =  0.0 ! not sure how to calc this yet
+    qif = 0.0  ! interflow (?) is always zero...
+    sm1 = sm1i
+    sm2 = sm1i
     qsx = 0.0
 
 
@@ -246,7 +255,7 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
                           ptotVec)                               !  OUTPUT
 
         ! print*, "SNOWOP NOT IMPLEMENTED"
-        sweVecOutput = sweVec
+        !sweVecOutput = sweVec
         case(1)
             print*, "SNOWOP NOT IMPLEMENTED"
     end select
@@ -273,11 +282,10 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
         q12 = ku * (sm1/sm1max)**c
 
         ! Compute baseflow
-        qb = MIN(sm2, ks*(sm2/sm2max)**lowercasen)
+        qb =ks*(sm2/sm2max)**lowercasen
 
         ! Compute saturated area
         Ac = 1 - (1 - sm1/sm1max) ** beta
-        print*, Ac
 
         ! Compute surface runoff
         qsx = Ac*qin
@@ -290,7 +298,11 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
         sm2 = sm2 + q12 - qb
 
         ! store streamflow
+        qinOutput(i) = qin
         qVecOutput(i) = qb + qsx
+        eVecOutput(i) = E
+        qsxVecOutput(i) = qsx
+        qbVecOutput(i) = qb
 
     end do
 
