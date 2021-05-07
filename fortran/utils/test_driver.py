@@ -25,14 +25,14 @@ frc = ForcingModel()
 frc.read()
 
 # read in forcings for the desired time period
-daily_temp, daily_precip, q, day_len_hrs, daily_swe = frc(start_date, end_date)
+daily_temp, daily_precip, qobs, day_len_hrs, daily_swe = frc(start_date, end_date)
 
 # read these in (they are fixed in time)
 elev = np.load(data_base + "elev.npy")
 dz = np.load(data_base + "dz.npy")
 
 # Load the snow17 parameters
-pkl_file = open('snow17params.pkl', 'rb')
+pkl_file = open('../parameter_files/snow17params.pkl', 'rb')
 snow17params = pickle.load(pkl_file)
 pkl_file.close()
 
@@ -101,25 +101,50 @@ plwhc = snow17params.get('plwhc')#04                      #         ! PARAMETER 
 pxtemp  = snow17params.get('pxtemp')#2.                      #         ! PARAMETER   SNOW17
 pxtemp1 = snow17params.get('pxtemp1')#-1.                    #         ! PARAMETER   SNOW17
 pxtemp2 = snow17params.get('pxtemp2')#3.                     #         ! PARAMETER   SNOW17
+nr =  1.
+kr =  2.9
+
+# NOT IMPLEMENTED
+sm1Fmax = 0.
+alpha=0.
+lam = 0.
+
+# INITIAL CONDITIONS
+sm1i  = 200.
+sm2i  = 400.
 
 # hydrologic model parameters ...
-sm1max = 800.                    #         ! PARAMETER   ?
-sm2max = 800.                   #         ! PARAMETER   ?
-ku = .8                         #         ! PARAMETER   PERCOLATION
-c = 1.                           #         ! PARAMETER   PERCOLATION
-sm1Fmax = 240                    #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-psi = .1                         #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-alpha = .1                       #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-ks = .99                          #         ! PARAMETER   BASEFLOW
-lam = .1                         #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-lowercasen = 2.0                  #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-beta = .6                       #         ! PARAMETER   SFROFF
-nr = 2.
-kr = 2.9
+# hydrologic model parameters ...
+model_parameters={"sm1max" : 800.,                     #         ! PARAMETER   ?
+        "sm2max" : 1200.,                     #         ! PARAMETER   ?
+        "ku" : 30.0,                         #         ! PARAMETER   PERCOLATION
+        "c" : 1.,                            #         ! PARAMETER   PERCOLATION                    #         ! PARAMETER   PERCOLATION  --- OPTIONAL
+        "psi" : .1,                          #         ! PARAMETER   PERCOLATION  --- OPTIONAL
+        "ks" : .001,                          #         ! Baseflow coefficient
+        "lowercasen" : 1.0,                  #         ! PARAMETER   BASEFLOW  --- OPTIONAL
+        "beta" : .6}                         #         ! PARAMETER   SFROFF
 
+
+x0 = np.fromiter(model_parameters.values(), dtype='float')
+
+
+
+
+#         ! PARAMETER   ?
+#         ! PARAMETER   ?
+#         ! PARAMETER   PERCOLATION
+#         ! PARAMETER   PERCOLATION
+#         ! PARAMETER   PERCOLATION  --- OPTIONAL
+#         ! PARAMETER   PERCOLATION  --- OPTIONAL
+#         ! PARAMETER   PERCOLATION  --- OPTIONAL
+#         ! PARAMETER   BASEFLOW
+#         ! PARAMETER   BASEFLOW  --- OPTIONAL
+#         ! PARAMETER   BASEFLOW  --- OPTIONAL
+#         ! PARAMETER   SFROFF
 #for sm1max in np.arange(100., 1000., 50.):
-for sm2max in [800.]:
-  foo = dr.model_driver(snowop   = SNOWOP,     #         ! OPTION   SNOW option
+
+def wrapper(x0):
+    output  = dr.model_driver(snowop   = SNOWOP,     #         ! OPTION   SNOW option
                         etop     = ETOP,       #         ! OPTION   Percolation option
                         drainop  = DRAINOP,    #         ! OPTION   Snow option
                         satop    = SATOP,      #         ! OPTION   Saturated Area Option
@@ -148,21 +173,50 @@ for sm2max in [800.]:
                         pxtemp     = pxtemp,     #         ! PARAMETER   SNOW17
                         pxtemp1    = pxtemp1,    #         ! PARAMETER   SNOW17
                         pxtemp2    = pxtemp2,     #           ! PARAMETER   SNOW17
-                        sm1max     = sm1max,        #         ! PARAMETER   ?
-                        sm2max     = sm2max,       #         ! PARAMETER   ?
-                        ku         = ku,           #         ! PARAMETER   PERCOLATION
-                        c          = c,            #         ! PARAMETER   PERCOLATION
+                        sm1i       = sm1i,
+                        sm2i       = sm2i,
+                        sm1max     = x0[0],#sm1max,        #         ! PARAMETER   ?
+                        sm2max     = x0[1],#sm2max,       #         ! PARAMETER   ?
+                        ku         = x0[2],#ku,           #         ! PARAMETER   PERCOLATION
+                        c          = x0[3],#c,            #         ! PARAMETER   PERCOLATION
                         sm1fmax    = sm1Fmax,      #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-                        psi        = psi,          #         ! PARAMETER   PERCOLATION  --- OPTIONAL
+                        psi        = x0[4],#psi,          #         ! PARAMETER   PERCOLATION  --- OPTIONAL
                         alpha      = alpha,        #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-                        ks         = ks,           #         ! PARAMETER   BASEFLOW
+                        ks         = x0[5],#ks,           #         ! PARAMETER   BASEFLOW
                         lam        = lam,      #        ! PARAMETER   BASEFLOW  --- OPTIONAL
-                        lowercasen = lowercasen,   #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-                        beta       = beta,         #         ! PARAMETER   SFROFF
+                        lowercasen = x0[6],#lowercasen,   #         ! PARAMETER   BASEFLOW  --- OPTIONAL
+                        beta       = x0[7],#beta,         #         ! PARAMETER   SFROFF
                         nr         = nr,
                         kr         = kr)
-  plt.plot(foo[1], label=sm2max)
 
+    #qtot, qchan, qb, qsx, eVec, qin = output
+    #return np.sqrt(np.mean((qchan - qobs)**2))
+    return output
+
+def objective_func_partial(x0, fx):
+    output = fx(x0)
+    qtot, qchan, qb, qsx, eVec, qin = output
+    return np.sqrt(np.mean((qchan - qobs)**2))
+
+objective_func = lambda x: objective_func_partial(x, wrapper)
+
+x0 = np.fromiter(model_parameters.values(), dtype='float')
+
+# we don't need to calibrate the undercatch
+#objective_func = lambda x: wrapper(x)
+# result = scipy.optimize.minimize(objective_func, x0, method='Nelder-Mead', options={"maxiter":5000})
+# qtot, qchan, qb, qsx, eVec, qin = wrapper(result.x)
+qtot0, qchan0, qb0, qsx0, eVec0, qin0 = wrapper(x0)
+
+
+plt.plot(qobs.values, label='qobs', linestyle='--')
+# plt.plot(qchan, label ='qchan')
+plt.plot(qchan0, label ='qchan0')
+
+# plt.plot(qb, label = 'qb')
+# plt.plot(qsx, label = 'qsx')
+# plt.legend()
+# plt.show()
 
 # # routing function...
 # def ht(t, k=3.5, N=4):
@@ -178,9 +232,6 @@ for sm2max in [800.]:
 
 #plt.plot(foo[0])
 #plt.plot(foo[1])
-plt.plot(q.values, linestyle='--')
-plt.legend()
-plt.show()
 
 #np.convolve(uht,foo)
 # plt.plot(foo)
