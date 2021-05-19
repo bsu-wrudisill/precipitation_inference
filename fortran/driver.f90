@@ -38,8 +38,8 @@ real function ht(t, k, n) !=3.5, N=4)
 end function ht
 
 ! Helper functions
-function PET(L, t, etpar)
-    real :: PET, L, t, etpar
+function PET(L, t)
+    real :: PET, L, t
     real :: sat_vap_pres, abs_humidity
     ! Potential evapotranspiration calculator
     ! L: Length of day
@@ -47,7 +47,22 @@ function PET(L, t, etpar)
     ! etpar: parameter
     sat_vap_pres = (.6112)*exp((17.67*t)/(t + 243.5))
     abs_humidity = (2165 * sat_vap_pres)/(t + 273.15)
-    PET=L*abs_humidity*etpar
+    PET = .55 * (L/12.)**2 * abs_humidity
+
+
+
+    ! # Potential evapotranspiration calculator
+    ! # L: Length of day
+    ! # rho_v_sat: staturated absolute humidity
+    ! # etpar: parameter
+    ! sat_vap_pres = (.6112)*np.exp((17.67*t)/(t + 243.5))
+    ! abs_humidity = (2165. * sat_vap_pres)/(t + 273.15)
+
+    ! # compute PET
+    ! PET=.55 * (L/12.)**2 * abs_humidity
+    ! return PET
+
+
 end function PET
 
 
@@ -96,7 +111,7 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
                         beta,       &         ! PARAMETER   SFROFF
                         Nr, &
                         kr, &
-                        qVecOutput, chanVecOutput, qbVecOutput, qsxVecOutput, eVecOutput, qinOutput)          ! OUTPUT
+                        qVecOutput, chanVecOutput, qbVecOutput, qsxVecOutput, eVecOutput, qinOutput, sm1Output, sm2Output)          ! OUTPUT
 
 
 
@@ -178,6 +193,8 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     real, intent(out), dimension(ntimes) :: qsxVecOutput
     real, intent(out), dimension(ntimes) :: eVecOutput
     real, intent(out), dimension(ntimes) :: qinOutput
+    real, intent(out), dimension(ntimes) :: sm1Output
+    real, intent(out), dimension(ntimes) :: sm2Output
 
     !real, intent(out), dimension(nlayers,ntimes) :: sweVecOutput
 
@@ -190,7 +207,8 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     real :: sm1                     ! state (sm in top layer)
     real :: sm2                     ! state (sm in bottom layer)
     real :: sm1F                    ! state (free water in sm1?)
-    real :: E                       ! flux from sm1 --> atmos. (evaporation)
+    real :: E1                      ! flux from sm1 --> atmos. (evaporation)
+    real :: E2                      ! flux from sm1 --> atmos. (evaporation)
     real :: q12                     ! flux from sm1 --> sm2
     real :: qb                      ! flux from sm2 --> channel (baseflow )
     real :: q0                      ! parameter (percolation) -- baseflow at soil moisture saturation (constant)
@@ -199,8 +217,10 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     real :: qin                     ! rain + melt
     real :: qif                     ! "interflow" (?)
     real :: qufof                   ! saturation excess flow
-    real :: dsm1dt
-    real :: dsm2dt
+    real :: overflow_sm1            ! Bucket overflow
+    real :: overflow_sm2            ! Bucket overflow
+    real :: deficit_sm1             ! Bucket overflow
+    real :: deficit_sm2             ! Bucket overflow
     real, dimension(ntimes) :: htv ! routing kernel
     real, dimension(ntimes*2-1) :: cnvrt
 
@@ -261,8 +281,12 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     end select
 
     ! Compute the total outflow for all snow layers...
+    ! they are the same area ... so the avg is appropriate
     do i=1,ntimes
-        outflowVecTotal(i) = SUM(outflowVec(:,i))
+        if (outflowVec(0,i) < 0.) then
+            print*, "outflowVec lt 0"
+        end if
+        outflowVecTotal(i) = SUM(outflowVec(:,i))/real(nlayers)
     end do
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -273,10 +297,13 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
 
     do i=1,ntimes
         ! get the snowmelt and the rain ...
-        qin = outflowVecTotal(i)/3.0 ! + rain(?)
+        qin = outflowVecTotal(i) ! + rain(?)
 
         ! compute PET
-        E = PET(i)*min(sm1,sm1max)/sm1max
+        E1 = PET(i)*sm1/sm1max
+
+        ! Now compute the residual from the lower bucket
+        E2 = (PET(i) - E1)*sm2/sm2max
 
         ! Compute Percolation
         q12 = ku * (sm1/sm1max)**c
@@ -285,24 +312,45 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
         qb =ks*(sm2/sm2max)**lowercasen
 
         ! Compute saturated area
-        Ac = 1 - (1 - sm1/sm1max) ** beta
+        Ac = 1. - (1. - sm1/sm1max) ** beta
 
         ! Compute surface runoff
-        qsx = Ac*qin
+        qsx = MAX(Ac,0.0)*qin
+
+        ! Compute bucket overflow
+        deficit_sm1 = sm1max - sm1
+        overflow_sm1 = MAX((qin - qsx) - deficit_sm1, 0.0)
 
         ! Update soil moisture in both layers
         ! top layer change
-        sm1 = sm1 + (qin - qsx) - E - q12 - qif
+        sm1 = MAX(0.0, sm1 + (qin - qsx - overflow_sm1) - E1 - q12 - qif)
+
+        ! Bucket overflow for sm2
+        deficit_sm2 = sm2max - sm2
+        overflow_sm2 = MAX(q12 - deficit_sm2, 0.0)
 
         ! bottom layer change
-        sm2 = sm2 + q12 - qb
+        sm2 = MAX(0.0, sm2 + q12 - qb - overflow_sm2 - E2)
 
         ! store streamflow
+
         qinOutput(i) = qin
-        qVecOutput(i) = qb + qsx
-        eVecOutput(i) = E
+        qVecOutput(i) = qb + qsx + overflow_sm1 + overflow_sm2
+        eVecOutput(i) = E1 + E2
         qsxVecOutput(i) = qsx
         qbVecOutput(i) = qb
+        sm1Output(i) = sm1
+        sm2Output(i) = sm2
+
+
+        ! DO some error checking
+        if (sm1 < 0.) then
+            print*, i, "SM1 negative"
+        else if (sm2 < 0.) then
+            print*, i, "SM2 negative"
+        else if (Ac > 1.0) then
+            print*, i, "Ac gt 1"
+        end if
 
     end do
 
