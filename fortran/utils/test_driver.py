@@ -15,9 +15,33 @@ import scipy.optimize
 from scipy.special import gamma
 import pickle
 
+
+
+def kge(mod, obs):
+    #
+    mobs = np.mean(obs)
+    sobs = np.std(obs)
+
+    # mean ratio
+    b = np.mean(mod) / mobs
+    # std
+    a = np.std(mod) / sobs
+    # corr coeff
+    r = np.corrcoef(mod, obs)[0, 1]  # corrcoef returns the correlation matrix...
+    # the diagonals are 1, the off-diags are the 'r'
+    # value that we want
+    kgeval = 1 -np.sqrt((r - 1.)**2 + (a - 1.)**2 + (b - 1)**2)
+    return kgeval
+
+# read PET data
+df = pd.read_csv("../../data/Anna_etal_East_Flux_Tower.csv")
+df['date'] = pd.to_datetime(df['date'])
+df = df.set_index('date')
+
 # load data ...
-start_date = "2010-10-01"
-end_date = "2020-09-30"
+#start_date = "2017-04-15"
+start_date = "2017-10-01"
+end_date = "2019-09-28"
 data_base = "/Users/williamrudisill/Documents/Conceptual_Runoff_Model/data/"
 
 # load data ...
@@ -61,10 +85,9 @@ ntimes=len(dates)
 
 # create PET forcing
 PET = np.zeros_like(jdays)
-etpar = .09
 i=0
 for l,t in zip(day_len_hrs, daily_temp):
-   PET[i] = (dr.pet(l,t,etpar))
+   PET[i] = (dr.pet(l,t))
    i+=1
 
 
@@ -101,8 +124,8 @@ plwhc = snow17params.get('plwhc')#04                      #         ! PARAMETER 
 pxtemp  = snow17params.get('pxtemp')#2.                      #         ! PARAMETER   SNOW17
 pxtemp1 = snow17params.get('pxtemp1')#-1.                    #         ! PARAMETER   SNOW17
 pxtemp2 = snow17params.get('pxtemp2')#3.                     #         ! PARAMETER   SNOW17
-nr =  1.
-kr =  2.9
+nr =  2.0
+kr =  1.0
 
 # NOT IMPLEMENTED
 sm1Fmax = 0.
@@ -110,19 +133,20 @@ alpha=0.
 lam = 0.
 
 # INITIAL CONDITIONS
-sm1i  = 200.
-sm2i  = 400.
-
+sm1i  = 100.
+sm2i  = 700.
+sm1max = 200.
+sm2max = 1000.
+psi=0.0
 # hydrologic model parameters ...
 # hydrologic model parameters ...
-model_parameters={"sm1max" : 800.,                     #         ! PARAMETER   ?
-        "sm2max" : 1200.,                     #         ! PARAMETER   ?
-        "ku" : 30.0,                         #         ! PARAMETER   PERCOLATION
-        "c" : 1.,                            #         ! PARAMETER   PERCOLATION                    #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-        "psi" : .1,                          #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-        "ks" : .001,                          #         ! Baseflow coefficient
-        "lowercasen" : 1.0,                  #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-        "beta" : .6}                         #         ! PARAMETER   SFROFF
+model_parameters={"ku" : 10.0,              #         ! PARAMETER   PERCOLATION
+                  "c" : 10.0,               #         ! PARAMETER   PERCOLATION                    #         ! PARAMETER   PERCOLATION  --- OPTIONAL
+                  "psi" : .1,               #         ! PARAMETER   PERCOLATION  --- OPTIONAL
+                  "ks" : 20,                #         ! Baseflow coefficient
+                  "lowercasen" : .5,        #         ! PARAMETER   BASEFLOW  --- OPTIONAL
+                  "beta" : .00001}
+                                            #         ! PARAMETER   SFROFF
 
 
 x0 = np.fromiter(model_parameters.values(), dtype='float')
@@ -175,17 +199,17 @@ def wrapper(x0):
                         pxtemp2    = pxtemp2,     #           ! PARAMETER   SNOW17
                         sm1i       = sm1i,
                         sm2i       = sm2i,
-                        sm1max     = x0[0],#sm1max,        #         ! PARAMETER   ?
-                        sm2max     = x0[1],#sm2max,       #         ! PARAMETER   ?
-                        ku         = x0[2],#ku,           #         ! PARAMETER   PERCOLATION
-                        c          = x0[3],#c,            #         ! PARAMETER   PERCOLATION
+                        sm1max     = sm1max,        #         ! PARAMETER   ?
+                        sm2max     = sm2max,       #         ! PARAMETER   ?
+                        ku         = x0[0],#ku,           #         ! PARAMETER   PERCOLATION
+                        c          = x0[1],#c,            #         ! PARAMETER   PERCOLATION
                         sm1fmax    = sm1Fmax,      #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-                        psi        = x0[4],#psi,          #         ! PARAMETER   PERCOLATION  --- OPTIONAL
+                        psi        = psi,          #         ! PARAMETER   PERCOLATION  --- OPTIONAL
                         alpha      = alpha,        #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-                        ks         = x0[5],#ks,           #         ! PARAMETER   BASEFLOW
+                        ks         = x0[2],#ks,           #         ! PARAMETER   BASEFLOW
                         lam        = lam,      #        ! PARAMETER   BASEFLOW  --- OPTIONAL
-                        lowercasen = x0[6],#lowercasen,   #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-                        beta       = x0[7],#beta,         #         ! PARAMETER   SFROFF
+                        lowercasen = x0[3],#lowercasen,   #         ! PARAMETER   BASEFLOW  --- OPTIONAL
+                        beta       = x0[4],#beta,         #         ! PARAMETER   SFROFF
                         nr         = nr,
                         kr         = kr)
 
@@ -195,48 +219,38 @@ def wrapper(x0):
 
 def objective_func_partial(x0, fx):
     output = fx(x0)
-    qtot, qchan, qb, qsx, eVec, qin = output
-    return np.sqrt(np.mean((qchan - qobs)**2))
+    qtot, qchan, qb, qsx, eVec, qin, sm1, sm2 = output
+
+    return np.sqrt(np.mean((qchan - qobs)**2)) #+ np.sqrt(np.mean((eVec - df['ET_filled_mm/day'])**2))
 
 objective_func = lambda x: objective_func_partial(x, wrapper)
 
 x0 = np.fromiter(model_parameters.values(), dtype='float')
 
 # we don't need to calibrate the undercatch
-#objective_func = lambda x: wrapper(x)
-# result = scipy.optimize.minimize(objective_func, x0, method='Nelder-Mead', options={"maxiter":5000})
-# qtot, qchan, qb, qsx, eVec, qin = wrapper(result.x)
-qtot0, qchan0, qb0, qsx0, eVec0, qin0 = wrapper(x0)
+result = scipy.optimize.minimize(objective_func, x0, method='Powell', options={"maxiter":5000})
+qtot, qchan, qb, qsx, eVec, qin, sm1, sm2 = wrapper(result.x)
+qtot0, qchan0, qb0, qsx0, eVec0, qin0, sm10, sm20 = wrapper(x0)
 
+# #read some ET data
+# df = pd.read_csv("../../data/Anna_etal_East_Flux_Tower.csv")
+# df['date'] = pd.to_datetime(df['date'])
+# df = df.set_index('date')
+
+# df['PET'] = PET
+# df['AET0'] = eVec0
+# df['AET1'] = eVec
+
+# df.plot()
+# plt.show()
 
 plt.plot(qobs.values, label='qobs', linestyle='--')
-# plt.plot(qchan, label ='qchan')
+plt.plot(qchan, label ='qchan')
 plt.plot(qchan0, label ='qchan0')
-
-# plt.plot(qb, label = 'qb')
-# plt.plot(qsx, label = 'qsx')
-# plt.legend()
-# plt.show()
-
-# # routing function...
-# def ht(t, k=3.5, N=4):
-#     a = (t/k)**(N-1) * np.exp(-t/k)/k*gamma(N)
-#     return a/a.sum()
-
-# t=np.linspace(0,len(jdays)-1,len(jdays))
-# uht = ht(t)
-# nx = len(foo)
-# nb = len(foo)
-# ny = len(foo)*2 - 1
-# c=dr.convolve(nx=nx, nb=nb, ny=ny, bb=uht, xx=foo)
-
-#plt.plot(foo[0])
-#plt.plot(foo[1])
-
-#np.convolve(uht,foo)
-# plt.plot(foo)
-# plt.plot(q.values)
-# plt.show()
+# #plt.plot(qb0, label ='qb0')
+# # plt.plot(qsx0, label ='qsx0')
+plt.legend()
+plt.show()
 
 
 

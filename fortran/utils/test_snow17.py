@@ -98,7 +98,6 @@ x0 = np.fromiter(model_parameters.values(), dtype='float')
 snow17objective_fun = lambda x: objective_function(daily_swe, snow17_caller_a, x)
 
 # Using the ...Powell algorithm seems to produce really weird values (lots of negatives)
-
 result1 = scipy.optimize.minimize(snow17objective_fun, x0, method='Nelder-Mead', options={"disp":True})
 # result2 = scipy.optimize.minimize(snow17objective_fun, x0, method='Nelder-Mead', options={"maxiter":5000, "disp":True})
 
@@ -287,8 +286,10 @@ plt.scatter([pd.to_datetime(aso_date04)]*nlayers,
 
 
 
+
 plt.legend()
-plt.show()
+#plt.show()
+plt.savefig("snow17_calibration_aso", dpi=500)
 
 
 # SAVE THE FINAL PARAMETERS

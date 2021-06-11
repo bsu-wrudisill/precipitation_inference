@@ -26,7 +26,7 @@ import pickle
 
 
 # load data ...
-start_date = "2010-10-01"
+start_date = "2015-10-01"
 end_date = "2020-09-30"
 data_base = "/Users/williamrudisill/Documents/Conceptual_Runoff_Model/data/"
 
@@ -42,7 +42,7 @@ elev = np.load(data_base + "elev.npy")
 dz = np.load(data_base + "dz.npy")
 
 # Load the snow17 parameters
-pkl_file = open('fortran/utils/snow17params.pkl', 'rb')
+pkl_file = open('fortran/parameter_files/snow17params.pkl', 'rb')
 snow17params = pickle.load(pkl_file)
 pkl_file.close()
 
@@ -71,10 +71,10 @@ ntimes=len(dates)
 
 # create PET forcing
 PET = np.zeros_like(jdays)
-etpar = .09
+#etpar = .09
 i=0
 for l,t in zip(day_len_hrs, daily_temp):
-   PET[i] = (dr.pet(l,t,etpar))
+   PET[i] = (dr.pet(l,t))
    i+=1
 
 
@@ -113,9 +113,9 @@ pxtemp1 = snow17params.get('pxtemp1')#-1.                    #         ! PARAMET
 pxtemp2 = snow17params.get('pxtemp2')#3.                     #         ! PARAMETER   SNOW17
 
 # hydrologic model parameters ...
-sm1max = 200.                    #         ! PARAMETER   ?
-sm2max = 3000.                   #         ! PARAMETER   ?
-ku = .01                         #         ! PARAMETER   PERCOLATION
+sm1max = 300.                    #         ! PARAMETER   ?
+sm2max = 500.                   #         ! PARAMETER   ?
+ku = 10                         #         ! PARAMETER   PERCOLATION
 c = 1.                           #         ! PARAMETER   PERCOLATION
 sm1Fmax = 240                    #         ! PARAMETER   PERCOLATION  --- OPTIONAL
 psi = .1                         #         ! PARAMETER   PERCOLATION  --- OPTIONAL
@@ -123,10 +123,12 @@ alpha = .1                       #         ! PARAMETER   PERCOLATION  --- OPTION
 ks = .4                          #         ! PARAMETER   BASEFLOW
 lam = .1                         #         ! PARAMETER   BASEFLOW  --- OPTIONAL
 lowercasen = 1.                  #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-beta = 1.5                       #         ! PARAMETER   SFROFF
+beta = 2.                       #         ! PARAMETER   SFROFF
 nr = 2.
 kr = 2.9
 
+sm1i = 150
+sm2i = 250
 
 # x=[200.,
 #    3000.,
@@ -143,7 +145,7 @@ kr = 2.9
 #    2.9]
 
 def my_loglike(x, obs_data, sigma):
-    qr,qchan,snow = dr.model_driver(snowop   = SNOWOP,     #         ! OPTION   SNOW option
+    output = dr.model_driver(snowop   = SNOWOP,     #         ! OPTION   SNOW option
                                     etop     = ETOP,       #         ! OPTION   Percolation option
                                     drainop  = DRAINOP,    #         ! OPTION   Snow option
                                     satop    = SATOP,      #         ! OPTION   Saturated Area Option
@@ -160,8 +162,8 @@ def my_loglike(x, obs_data, sigma):
                                     opg_method = opg_method, #         ! PARAMETER   SNOW17
                                     dz         = dz,         #         ! PARAMETER   SNOW17
                                     dt         = dt,         #         ! PARAMETER   SNOW17
-                                    opg        = x[10],        #         ! PARAMETER   SNOW17
-                                    bias       = x[11],       #         ! PARAMETER   SNOW17
+                                    opg        = x[7],        #         ! PARAMETER   SNOW17
+                                    bias       = x[8],       #         ! PARAMETER   SNOW17
                                     uadj       = uadj,       #         ! PARAMETER   SNOW17
                                     mbase      = mbase,      #         ! PARAMETER   SNOW17
                                     mfmax      = mfmax,      #         ! PARAMETER   SNOW17
@@ -172,20 +174,23 @@ def my_loglike(x, obs_data, sigma):
                                     pxtemp     = pxtemp,     #         ! PARAMETER   SNOW17
                                     pxtemp1    = pxtemp1,    #         ! PARAMETER   SNOW17
                                     pxtemp2    = pxtemp2,     #           ! PARAMETER   SNOW17
-                                    sm1max     = x[0],#sm1max,        #         ! PARAMETER   ?
-                                    sm2max     = x[1],#sm2max,       #         ! PARAMETER   ?
-                                    ku         = x[2],#ku,           #         ! PARAMETER   PERCOLATION
-                                    c          = x[3],#c,            #         ! PARAMETER   PERCOLATION
-                                    sm1fmax    = sm1Fmax,      #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-                                    psi        = x[4],#psi,          #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-                                    alpha      = x[5],#alpha,        #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-                                    ks         = x[6],#ks,           #         ! PARAMETER   BASEFLOW
-                                    lam        = x[7],#lam,      #        ! PARAMETER   BASEFLOW  --- OPTIONAL
-                                    lowercasen = x[8],#lowercasen,   #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-                                    beta       = x[9],#beta,         #         ! PARAMETER   SFROFF
+                                    sm1i       = sm1i,
+                                    sm2i       = sm2i,
+                                    sm1max     = x[0], #sm1max,        #         ! PARAMETER   ?
+                                    sm2max     = x[1], #sm2max,       #         ! PARAMETER   ?
+                                    ku         = x[2], #ku,           #         ! PARAMETER   PERCOLATION
+                                    c          = x[3], #c,            #         ! PARAMETER   PERCOLATION
+                                    sm1fmax    = 0.0,      #         ! PARAMETER   PERCOLATION  --- OPTIONAL
+                                    psi        = 0.0,          #         ! PARAMETER   PERCOLATION  --- OPTIONAL
+                                    alpha      = 0.0,        #         ! PARAMETER   PERCOLATION  --- OPTIONAL
+                                    ks         = x[4], #ks,           #         ! PARAMETER   BASEFLOW
+                                    lam        = 0.0,  #lam,      #        ! PARAMETER   BASEFLOW  --- OPTIONAL
+                                    lowercasen = x[5], #lowercasen,   #         ! PARAMETER   BASEFLOW  --- OPTIONAL
+                                    beta       = x[6], #beta,         #         ! PARAMETER   SFROFF
                                     nr         = nr,
                                     kr         = kr)
 
+    qtot, qchan, qb, qsx, eVec, qin, sm1, sm2 =  output
     return -(0.5/sigma**2)*np.sum((obs_data - qchan)**2)
 
 
@@ -224,20 +229,17 @@ def main():
     logl = LogLike(my_loglike, obs_q, sigma)
 
     with pm.Model() as model:
-        sm1max     = pm.Normal("sm1max", mu=150., sigma=20.)
-        sm2max     = pm.Normal("sm2max", mu=600., sigma=30.)
-        ku         = pm.Normal("ku", mu=.01, sigma=.001)
-        c          = pm.Normal("c", mu=1., sigma=.01)
-        psi        = pm.Normal("psi", mu=.1, sigma=.001)
-        alpha      = pm.Normal("alpha", mu=.1, sigma=.001)
-        ks         = pm.Normal("ks", mu=.4, sigma=.001)
-        lam        = pm.Normal("lam", mu=.1, sigma=.001)
-        lowercasen = pm.Normal("lowercasen", mu=.1, sigma=.01)
-        beta       = pm.Normal("beta", mu=1.5, sigma=.01)
-        opg        = pm.Normal("opg", mu=opg_clb, sigma=.001)
+        sm1max     = pm.Normal("sm1max", mu=500., sigma=100.)
+        sm2max     = pm.Normal("sm2max", mu=1000., sigma=100.)
+        ku         = pm.Normal("ku", mu=100., sigma=30.)
+        c          = pm.Normal("c", mu=10., sigma=2.)
+        ks         = pm.Normal("ks", mu=10., sigma=.001)
+        lowercasen = pm.Normal("lowercasen", mu=1.0, sigma=.5)
+        beta       = pm.Normal("beta", mu=1.5, sigma=1.)
+        opg        = pm.Normal("opg", mu=opg_clb, sigma=.01)
         bias       = pm.Normal("bias", mu=bias_clb, sigma=.1)
 
-        parameters = tt.as_tensor_variable([sm1max,sm2max,ku,c,psi,alpha,ks,lam,lowercasen,beta, opg, bias])
+        parameters = tt.as_tensor_variable([sm1max,sm2max,ku,c,ks,lowercasen,beta, opg, beta])
 
         pm.Potential('loglike', logl(parameters))
 
@@ -245,7 +247,7 @@ def main():
 
         with model:
             step1 = pm.Metropolis()
-            trace = pm.sample(step = step1, chains=14, tune=2000)#tune=nburn, discard_tuned_samples=True)# start={'m':0.4, 'c':3})
+            trace = pm.sample(step = step1, chains=14, tune=2000, discard_tuned_samples=True)# start={'m':0.4, 'c':3})
             # posterior_predictive = pm.sample_posterior_predictive(trace, random_seed=)
 
             with open('trace.pkl', 'wb') as buff:
