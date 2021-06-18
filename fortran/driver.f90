@@ -231,7 +231,9 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
     real, dimension(nlayers,ntimes) :: ptotVec
 
     ! Collapse Melt into the single step
-    real, dimension(ntimes) :: outflowVecTotal
+    !real, dimension(ntimes) :: outflowVecTotal
+    real, dimension(ntimes) :: outflowVec_adjusted
+    real :: scale ! corrects runoff
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     !!           INITIAL CONDITIONS                   !!
@@ -282,12 +284,19 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
 
     ! Compute the total outflow for all snow layers...
     ! they are the same area ... so the avg is appropriate
-    do i=1,ntimes
-        if (outflowVec(0,i) < 0.) then
-            print*, "outflowVec lt 0"
-        end if
-        outflowVecTotal(i) = SUM(outflowVec(:,i))/real(nlayers)
-    end do
+
+    !-------- OLD METHOD--------
+    ! do i=1,ntimes
+    !     if (outflowVec(0,i) < 0.) then
+    !         print*, "outflowVec lt 0"
+    !     end if
+    !     outflowVecTotal(i) = SUM(outflowVec(:,i))/real(nlayers)
+    ! end do
+
+
+    !-------- NEW METHOD--------
+    scale = (SUM(outflowVec)/real(nlayers))/SUM(outflowVec(3,:))
+    outflowVec_adjusted = outflowVec(3,:)*scale
 
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Begin time stepping (1st order explicit Runge-Kutta)
@@ -297,7 +306,7 @@ subroutine model_driver(SNOWOP,     &         ! OPTION   SNOW option
 
     do i=1,ntimes
         ! get the snowmelt and the rain ...
-        qin = outflowVecTotal(i) ! + rain(?)
+        qin = outflowVec_adjusted(i) ! + rain(?)
 
         ! compute PET
         E1 = PET(i)*sm1/sm1max
