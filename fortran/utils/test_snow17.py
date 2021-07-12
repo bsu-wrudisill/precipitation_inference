@@ -74,7 +74,8 @@ def snow17_caller_01(jdays, daily_precip, daily_temp, x):
                             plwhc=x[7],
                             pxtemp=x[8],
                             pxtemp1=x[9],
-                            pxtemp2=x[10])
+                            pxtemp2=x[10],
+                            t_lapse=-.0065)
   return swe,m,rain,ptot
 
 # this packs in all of the forcing data.. so now the function is just of x
@@ -91,6 +92,7 @@ model_parameters = {"bias": 0.1,
                     "pxtemp": 2.0,
                     "pxtemp1": -1.0,
                     "pxtemp2": 3.0}
+
 
 x0 = np.fromiter(model_parameters.values(), dtype='float')
 
@@ -207,7 +209,8 @@ def snow17_caller_02(jdays, daily_precip, daily_temp, x0, x):
                             plwhc=x0[7],
                             pxtemp=x0[8],
                             pxtemp1=x0[9],
-                            pxtemp2=x0[10])
+                            pxtemp2=x0[10],
+                            t_lapse=x[2])
   return m,swe,rain,ptot
 
 
@@ -247,7 +250,7 @@ def objective_function(snotel_swe, fx, x, alpha=.1, beta=.9):
 #snow17_caller_02x = lambda jdays, daily_precip, daily_temp, x: snow17_caller_02(jdays, daily_precip, daily_temp, x0, x1)
 
 snow17objective_fun = lambda x: objective_function(daily_swe, snow17_caller_b, x)
-result2 = scipy.optimize.minimize(snow17objective_fun, [.002, 0.], method='Powell', options={"maxiter":5000, "disp":True})
+result2 = scipy.optimize.minimize(snow17objective_fun, [.002, 0., -.0065], method='Powell', options={"maxiter":5000, "disp":True})
 
 
 m,swe,rain,ptot = snow17_caller_b(result2.x)
@@ -288,21 +291,30 @@ plt.scatter([pd.to_datetime(aso_date04)]*nlayers,
 
 
 plt.legend()
-#plt.show()
-plt.savefig("snow17_calibration_aso", dpi=500)
+plt.show()
+
+saveflag = input("save (y/n)")
+if saveflag in ['y', 'yes']:
+  # SAVE THE FINAL PARAMETERS
+  model_parameters_updated = model_parameters
+
+  # update the model params
+  for i,k in enumerate(model_parameters_updated.keys()):
+      model_parameters_updated.update({k:result1.x[i]})
+
+  # this wasn't one of the original ones...
+  model_parameters_updated['opg'] = result2.x[0]
+  model_parameters_updated['bias'] = result2.x[1]
+
+  pklbuf = open('snow17params.pkl', 'wb')
+  pickle.dump(model_parameters_updated, pklbuf)
+
+  # and save figure...
+  plt.savefig("snow17_calibration_aso", dpi=500)
+
+else:
+    print("parameters not saved")
 
 
-# SAVE THE FINAL PARAMETERS
-model_parameters_updated = model_parameters
 
-# update the model params
-for i,k in enumerate(model_parameters_updated.keys()):
-    model_parameters_updated.update({k:result1.x[i]})
-
-# this wasn't one of the original ones...
-model_parameters_updated['opg'] = result2.x[0]
-model_parameters_updated['bias'] = result2.x[1]
-
-pklbuf = open('snow17params.pkl', 'wb')
-pickle.dump(model_parameters_updated, pklbuf)
 
