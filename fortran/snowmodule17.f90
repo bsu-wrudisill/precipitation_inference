@@ -404,6 +404,7 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, & ! INPUTS
                         pxtemp, &                              ! parameters
                         pxtemp1, &                             ! parameters
                         pxtemp2, &                             ! parameters
+                        t_lapse, &                             ! temperature lapse rate
                         outflowVec, &                          ! OUTPUT
                         sweVec, &                              !  OUTPUT
                         rainVec, ptotVec)                                !  OUTPUT
@@ -438,6 +439,7 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, & ! INPUTS
                         real, intent(in) :: pxtemp
                         real, intent(in) :: pxtemp1
                         real, intent(in) :: pxtemp2
+                        real, intent(in) :: t_lapse
 
                         ! OUTPUTS
                         real, intent(out), dimension(nlayers,ntimes) :: outflowVec
@@ -449,7 +451,7 @@ subroutine snow17driver(ntimes, jdayVec, precipVec, tairVec, & ! INPUTS
                         !internal
 
                         ! states
-                        real, parameter :: t_lapse = -.0065    ! 6.5 c/m
+                        !real, parameter :: t_lapse = -.0065    ! 6.5 c/m
                         real, parameter :: stat_elev = 30.9    ! elevation in HUNDREDS of meters. Approx elevation of the Butte Snotel
                         real, parameter :: opg_lower_adj = .25  ! reduced the opg gradient for lower stations
                         real  :: swe
