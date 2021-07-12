@@ -228,14 +228,14 @@ objective_func = lambda x: objective_func_partial(x, wrapper)
 x0 = np.fromiter(model_parameters.values(), dtype='float')
 
 # we don't need to calibrate the undercatch
-result = scipy.optimize.minimize(objective_func, x0, method='Powell', options={"maxiter":5000})
+result = scipy.optimize.minimize(objective_func, x0, method='Powell', options={"maxiter":100000})
 qtot, qchan, qb, qsx, eVec, qin, sm1, sm2 = wrapper(result.x)
 qtot0, qchan0, qb0, qsx0, eVec0, qin0, sm10, sm20 = wrapper(x0)
 
 # #read some ET data
-# df = pd.read_csv("../../data/Anna_etal_East_Flux_Tower.csv")
-# df['date'] = pd.to_datetime(df['date'])
-# df = df.set_index('date')
+df = pd.read_csv("../../data/Anna_etal_East_Flux_Tower.csv")
+df['date'] = pd.to_datetime(df['date'])
+df = df.set_index('date')
 
 # df['PET'] = PET
 # df['AET0'] = eVec0
