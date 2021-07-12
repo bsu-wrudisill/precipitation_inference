@@ -26,7 +26,7 @@ import pickle
 
 
 # load data ...
-start_date = "2015-10-01"
+start_date = "2019-10-01"
 end_date = "2020-09-30"
 data_base = "/Users/williamrudisill/Documents/Conceptual_Runoff_Model/data/"
 
@@ -41,10 +41,17 @@ daily_temp, daily_precip, obs_q, day_len_hrs, daily_swe = frc(start_date, end_da
 elev = np.load(data_base + "elev.npy")
 dz = np.load(data_base + "dz.npy")
 
+pklbase = "/Users/williamrudisill/Documents/Conceptual_Runoff_Model/parameter_files/"
 # Load the snow17 parameters
-pkl_file = open('fortran/parameter_files/snow17params.pkl', 'rb')
+pkl_file = open(pklbase + "snow17params.pkl", 'rb')
 snow17params = pickle.load(pkl_file)
 pkl_file.close()
+
+
+pkl_file = open(pklbase +  "driver_params_calibrated.pkl", 'rb')
+driver_params = pickle.load(pkl_file)
+pkl_file.close()
+
 
 ### Do the elevation computing
 nlayers = 3
@@ -76,7 +83,6 @@ i=0
 for l,t in zip(day_len_hrs, daily_temp):
    PET[i] = (dr.pet(l,t))
    i+=1
-
 
 ##### Run Snow17 Model ######
 
@@ -113,36 +119,20 @@ pxtemp1 = snow17params.get('pxtemp1')#-1.                    #         ! PARAMET
 pxtemp2 = snow17params.get('pxtemp2')#3.                     #         ! PARAMETER   SNOW17
 
 # hydrologic model parameters ...
-sm1max = 300.                    #         ! PARAMETER   ?
-sm2max = 500.                   #         ! PARAMETER   ?
-ku = 10                         #         ! PARAMETER   PERCOLATION
-c = 1.                           #         ! PARAMETER   PERCOLATION
-sm1Fmax = 240                    #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-psi = .1                         #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-alpha = .1                       #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-ks = .4                          #         ! PARAMETER   BASEFLOW
-lam = .1                         #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-lowercasen = 1.                  #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-beta = 2.                       #         ! PARAMETER   SFROFF
+
+sm1max     = driver_params.get("sm1max")
+sm2max     = driver_params.get("sm2max")
+ku         = driver_params.get("ku")
+c          = driver_params.get("c")
+ks         = driver_params.get("ks")
+lowercasen = driver_params.get("lowercasen")
+beta       = driver_params.get("beta")
 nr = 2.
 kr = 2.9
-
 sm1i = 150
 sm2i = 250
 
-# x=[200.,
-#    3000.,
-#    .01,
-#    1.,
-#    240,
-#    .1,
-#    .1,
-#    .4,
-#    .1,
-#    1.,
-#    1.5,
-#    2.,
-#    2.9]
+
 
 def my_loglike(x, obs_data, sigma):
     output = dr.model_driver(snowop   = SNOWOP,     #         ! OPTION   SNOW option
@@ -162,8 +152,8 @@ def my_loglike(x, obs_data, sigma):
                                     opg_method = opg_method, #         ! PARAMETER   SNOW17
                                     dz         = dz,         #         ! PARAMETER   SNOW17
                                     dt         = dt,         #         ! PARAMETER   SNOW17
-                                    opg        = x[7],        #         ! PARAMETER   SNOW17
-                                    bias       = x[8],       #         ! PARAMETER   SNOW17
+                                    opg        = x[0],        #         ! PARAMETER   SNOW17
+                                    bias       = x[1],       #         ! PARAMETER   SNOW17
                                     uadj       = uadj,       #         ! PARAMETER   SNOW17
                                     mbase      = mbase,      #         ! PARAMETER   SNOW17
                                     mfmax      = mfmax,      #         ! PARAMETER   SNOW17
@@ -176,17 +166,17 @@ def my_loglike(x, obs_data, sigma):
                                     pxtemp2    = pxtemp2,     #           ! PARAMETER   SNOW17
                                     sm1i       = sm1i,
                                     sm2i       = sm2i,
-                                    sm1max     = x[0], #sm1max,        #         ! PARAMETER   ?
-                                    sm2max     = x[1], #sm2max,       #         ! PARAMETER   ?
-                                    ku         = x[2], #ku,           #         ! PARAMETER   PERCOLATION
-                                    c          = x[3], #c,            #         ! PARAMETER   PERCOLATION
+                                    sm1max     = sm1max,        #         ! PARAMETER   ?
+                                    sm2max     = sm2max,       #         ! PARAMETER   ?
+                                    ku         = ku,           #         ! PARAMETER   PERCOLATION
+                                    c          = c,            #         ! PARAMETER   PERCOLATION
                                     sm1fmax    = 0.0,      #         ! PARAMETER   PERCOLATION  --- OPTIONAL
                                     psi        = 0.0,          #         ! PARAMETER   PERCOLATION  --- OPTIONAL
                                     alpha      = 0.0,        #         ! PARAMETER   PERCOLATION  --- OPTIONAL
-                                    ks         = x[4], #ks,           #         ! PARAMETER   BASEFLOW
+                                    ks         = ks,           #         ! PARAMETER   BASEFLOW
                                     lam        = 0.0,  #lam,      #        ! PARAMETER   BASEFLOW  --- OPTIONAL
-                                    lowercasen = x[5], #lowercasen,   #         ! PARAMETER   BASEFLOW  --- OPTIONAL
-                                    beta       = x[6], #beta,         #         ! PARAMETER   SFROFF
+                                    lowercasen = lowercasen,   #         ! PARAMETER   BASEFLOW  --- OPTIONAL
+                                    beta       = beta,         #         ! PARAMETER   SFROFF
                                     nr         = nr,
                                     kr         = kr)
 
@@ -216,7 +206,7 @@ class LogLike(tt.Op):
 
 
 
-def main():
+def main(dict_of_parameters):
     # Get forcing data
     #obs_data = np.load("./data/daily_fakeq.npy")
 
@@ -229,17 +219,16 @@ def main():
     logl = LogLike(my_loglike, obs_q, sigma)
 
     with pm.Model() as model:
-        sm1max     = pm.Normal("sm1max", mu=500., sigma=100.)
-        sm2max     = pm.Normal("sm2max", mu=1000., sigma=100.)
-        ku         = pm.Normal("ku", mu=100., sigma=30.)
-        c          = pm.Normal("c", mu=10., sigma=2.)
-        ks         = pm.Normal("ks", mu=10., sigma=.001)
-        lowercasen = pm.Normal("lowercasen", mu=1.0, sigma=.5)
-        beta       = pm.Normal("beta", mu=1.5, sigma=1.)
-        opg        = pm.Normal("opg", mu=opg_clb, sigma=.01)
-        bias       = pm.Normal("bias", mu=bias_clb, sigma=.1)
+        # loop through the parameters and create the tt variables ...
+        list_of_parameters = []
+        for key in dict_of_parameters.keys():
+            p0 = dict_of_parameters.get(key)
+            p1 = pm.Normal(key, mu=p0[1], sigma=p0[2])
+            list_of_parameters.append(p1)
 
-        parameters = tt.as_tensor_variable([sm1max,sm2max,ku,c,ks,lowercasen,beta, opg, beta])
+
+#        parameters = tt.as_tensor_variable([sm1max,sm2max,ku,c,ks,lowercasen,beta, opg, beta])
+        parameters = tt.as_tensor_variable(list_of_parameters)#[sm1max,sm2max,ku,c,ks,lowercasen,beta, opg, beta])
 
         pm.Potential('loglike', logl(parameters))
 
@@ -264,6 +253,26 @@ def main():
 
 if __name__ == '__main__':
     print("pymc3 version: ", pm.__version__)
-    main()
+
+    # sm1max     = pm.Normal("sm1max", mu=500., sigma=100.)
+    # sm2max     = pm.Normal("sm2max", mu=1000., sigma=100.)
+    # ku         = pm.Normal("ku", mu=100., sigma=30.)
+    # c          = pm.Normal("c", mu=10., sigma=2.)
+    # ks         = pm.Normal("ks", mu=10., sigma=.001)
+    # lowercasen = pm.Normal("lowercasen", mu=1.0, sigma=.5)
+    # beta       = pm.Normal("beta", mu=1.5, sigma=1.)
+    # opg        = pm.Normal("opg", mu=opg_clb, sigma=.01)
+    # bias       = pm.Normal("bias", mu=bias_clb, sigma=.1)
+
+    # dict_of_params = {"opg":  ["normal", opg_clb, .08],
+    #                   "bias": ["normal", bias_clb, .2],
+    #                   "ku":   ["normal", bias_clb, .2],
+    #                   "c":    ["normal", bias_clb, .2],
+    #                   "lowercasen": ["normal", bias_clb, .2],
+    #                   "beta": ["normal", bias_clb, .2],
+
+
+
+    # main(dict_of_params)
 
 
